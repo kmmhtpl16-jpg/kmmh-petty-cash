@@ -555,6 +555,33 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 </div>
 
+<!-- ─── PRE-WITHDRAW COUNT MODAL ─── -->
+<div class="modal-bg" id="preCountModal">
+<div class="modal">
+  <h2>💰 ตรวจนับเงินก่อนเบิก</h2>
+  <div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#1a4a7a;margin-bottom:1rem;line-height:1.7">
+    📋 ก่อนบันทึกการเบิกเงินใหม่ กรุณา<strong>นับเงินสดจริงที่มีอยู่</strong>และกรอกยอดด้านล่าง เพื่อยืนยันความถูกต้องของเงินสดย่อย
+  </div>
+  <div class="field">
+    <label>ยอดตามบัญชี (บาท)</label>
+    <input type="number" id="pcBook" readonly style="background:#f0f0f0;color:#555;font-family:'IBM Plex Mono',monospace">
+  </div>
+  <div class="field">
+    <label>นับเงินจริงได้ (บาท) <span style="color:var(--red)">*</span></label>
+    <input type="number" id="pcActual" placeholder="กรอกยอดที่นับได้จริง" oninput="previewPreCount()" style="font-family:'IBM Plex Mono',monospace;font-size:15px">
+  </div>
+  <div id="pcDiffPreview" style="margin-bottom:.75rem"></div>
+  <div class="field" id="pcNoteField" style="display:none">
+    <label>หมายเหตุ (ยอดไม่ตรง — ต้องอธิบาย) <span style="color:var(--red)">*</span></label>
+    <textarea id="pcNote" placeholder="อธิบายสาเหตุที่ยอดต่างกัน..." oninput="checkPreCountNote()"></textarea>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('preCountModal')">ยกเลิก</button>
+    <button class="btn btn-dark btn-save" id="btnConfirmPreCount" onclick="confirmPreCount()" disabled style="opacity:.4;cursor:not-allowed">✅ ยืนยันและดำเนินการเบิก</button>
+  </div>
+</div>
+</div>
+
 <!-- ─── CLOSE MONTH MODAL ─── -->
 <div class="modal-bg" id="closeMonthModal">
 <div class="modal">
@@ -1407,12 +1434,121 @@ async function uploadReceiptToStorage(file){
   return urlData?.publicUrl || null;
 }
 
+// ── Pre-Count Modal (ก่อนเบิกเงิน) ──
+function openPreCountModal(){
+  const book=closing();
+  document.getElementById('pcBook').value=fmt2(book);
+  document.getElementById('pcActual').value='';
+  document.getElementById('pcDiffPreview').innerHTML='';
+  document.getElementById('pcNoteField').style.display='none';
+  document.getElementById('pcNote').value='';
+  const btn=document.getElementById('btnConfirmPreCount');
+  btn.disabled=true; btn.style.opacity='.4';
+  openModal('preCountModal');
+  setTimeout(()=>document.getElementById('pcActual').focus(),200);
+}
+
+function previewPreCount(){
+  const book=closing();
+  const actual=parseFloat(document.getElementById('pcActual').value);
+  const btn=document.getElementById('btnConfirmPreCount');
+  const noteField=document.getElementById('pcNoteField');
+  const preview=document.getElementById('pcDiffPreview');
+  if(isNaN(actual)||document.getElementById('pcActual').value===''){
+    preview.innerHTML=''; btn.disabled=true; btn.style.opacity='.4'; noteField.style.display='none'; return;
+  }
+  const diff=actual-book;
+  const absDiff=Math.abs(diff);
+  const ok=absDiff<0.005;
+  if(ok){
+    preview.innerHTML=`<div class="alert alert-ok" style="margin:0 0 .5rem">✅ ยอดตรง — เงินสดย่อยถูกต้อง (${fmt2(actual)} บาท)</div>`;
+    noteField.style.display='none';
+    btn.disabled=false; btn.style.opacity='1'; btn.textContent='✅ ยืนยันและดำเนินการเบิก';
+  } else {
+    const sign=diff>0?`เกิน +${fmt2(absDiff)}`:`ขาด ${fmt2(absDiff)}`;
+    preview.innerHTML=`<div class="alert alert-danger" style="margin:0 0 .5rem">⚠️ ยอดต่างกัน ${fmt2(absDiff)} บาท (${sign})</div>`;
+    noteField.style.display='block';
+    // เปิดปุ่มได้ก็ต่อเมื่อกรอกหมายเหตุแล้ว
+    checkPreCountNote();
+  }
+}
+
+function checkPreCountNote(){
+  const note=document.getElementById('pcNote').value.trim();
+  const btn=document.getElementById('btnConfirmPreCount');
+  if(note.length>0){ btn.disabled=false; btn.style.opacity='1'; btn.textContent='✅ ยืนยันและดำเนินการเบิก'; }
+  else { btn.disabled=true; btn.style.opacity='.4'; btn.textContent='✅ ยืนยันและดำเนินการเบิก'; }
+}
+
+async function confirmPreCount(){
+  const book=closing();
+  const actual=parseFloat(document.getElementById('pcActual').value);
+  const note=document.getElementById('pcNote').value.trim();
+  const diff=actual-book;
+  if(isNaN(actual)){ showToast('กรุณากรอกยอดที่นับจริง','error'); return; }
+  if(Math.abs(diff)>=0.005&&!note){ showToast('ยอดไม่ตรง — กรุณาระบุหมายเหตุ','error'); return; }
+  showLoading(true,'บันทึกการตรวจนับ...');
+  try{
+    await sb.from('petty_cash_counts').insert({
+      period_id:currentPeriod.id,
+      bal_book:book,
+      bal_real:actual,
+      diff,
+      note:note||(Math.abs(diff)<0.005?'ตรวจนับก่อนเบิกเงิน — ยอดตรง':'ตรวจนับก่อนเบิกเงิน'),
+      by_role:currentRole,
+      by_name:currentUser?.name||currentRole
+    });
+    await addAudit('edit',
+      `ตรวจนับก่อนเบิก | ยอดบัญชี: ${fmt2(book)} | จริง: ${fmt2(actual)} | ต่าง: ${fmt2(diff)}${note?' | หมายเหตุ: '+note:''}`
+    );
+    actualCash=String(actual);
+    document.getElementById('actualInput').value=actual;
+    await loadCounts();
+    renderCountHistory(); renderReconcile(); renderCards(); renderDiff();
+    showLoading(false);
+    closeModal('preCountModal');
+    // ดำเนินการเปิด form ต่อ (flag ส่งสัญญาณว่านับแล้ว)
+    _doOpenIncomeForm();
+  }catch(e){
+    showLoading(false);
+    showToast('บันทึกการตรวจนับล้มเหลว: '+e.message,'error');
+  }
+}
+
+// flag ป้องกัน loop
+let _incomeFormReady=false;
+
+function _doOpenIncomeForm(){
+  _incomeFormReady=true;
+  // เปิด formModal แล้วตั้ง type income
+  editTxId=null; pendingFiles=[]; pendingPreviews=[]; existingImageUrls=[];
+  document.getElementById('formTitle').textContent='เบิกเงิน / รับเงินเพิ่ม';
+  document.getElementById('fDate').value=todayStr();
+  updateThaiDate();
+  document.getElementById('fAmount').value='';
+  document.getElementById('fAcct').value='';
+  document.getElementById('fNote').value='';
+  document.getElementById('imgPreview').innerHTML='';
+  document.getElementById('compressInfo').textContent='';
+  setType('income');
+  openModal('formModal');
+  setTimeout(()=>document.getElementById('fAmount').focus(),200);
+}
+
 async function saveEntry(){
   const date=document.getElementById('fDate').value;
   const amount=parseFloat(document.getElementById('fAmount').value);
   const acct=document.getElementById('fAcct').value;
   const note=document.getElementById('fNote').value;
   if(!date||!amount||amount<=0){ showToast('กรุณากรอกวันที่และจำนวนเงิน','error'); return; }
+
+  // ── ถ้าเป็นการเบิก/รับเงิน ต้องนับเงินก่อน ──
+  if(formType==='income'&&!editTxId&&!_incomeFormReady){
+    closeModal('formModal');
+    openPreCountModal();
+    return;
+  }
+  _incomeFormReady=false; // reset flag หลังผ่านแล้ว
 
   showLoading(true,'อัปโหลดรูปภาพ...');
   try{
@@ -1955,7 +2091,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal'].forEach(id=>{
+  ['formModal','closeMonthModal','preCountModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -1963,7 +2099,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','preCountModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
