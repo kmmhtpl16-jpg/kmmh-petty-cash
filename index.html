@@ -1,0 +1,1974 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KMMH — ระบบเงินสดย่อย v4</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f3ee;--white:#fff;--dark:#1a1a1a;
+  --border:#e4e0d8;--border2:#ccc9c0;
+  --red:#c0392b;--red-bg:#fde8e8;--red-border:#f5b7b1;
+  --green:#1e8449;--green-bg:#e8f5ee;--green-border:#a9dfbf;
+  --amber:#b7770d;--amber-bg:#fef9e7;--amber-border:#f0c040;
+  --blue:#1a6bb5;--blue-bg:#eaf3fb;--blue-border:#aed6f1;
+  --muted:#888;--muted2:#bbb;
+  --radius:10px;--shadow:0 2px 14px rgba(0,0,0,.08);
+}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--dark);font-size:14px;min-height:100vh}
+.app{max-width:980px;margin:0 auto;padding:1rem 1rem 3rem}
+
+/* ── Login Screen ── */
+.login-screen{position:fixed;inset:0;background:#1a1a1a;display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:0}
+.login-box{background:#fff;border-radius:16px;padding:2rem 2rem 1.5rem;width:100%;max-width:320px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center}
+.login-logo{font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.login-title{font-size:22px;font-weight:700;color:var(--dark);margin-bottom:3px}
+.login-sub{font-size:12px;color:var(--muted);margin-bottom:1.25rem}
+.pin-dots{display:flex;justify-content:center;gap:10px;margin-bottom:1.25rem}
+.pin-dot{width:13px;height:13px;border-radius:50%;background:var(--border);border:2px solid var(--border2);transition:background .12s,border .12s}
+.pin-dot.filled{background:var(--dark);border-color:var(--dark)}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:.75rem}
+.pin-key{background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;font-size:18px;font-weight:600;cursor:pointer;font-family:'IBM Plex Mono',monospace;color:var(--dark);transition:all .1s;user-select:none;-webkit-user-select:none}
+.pin-key:hover{background:#e8e4dc;border-color:var(--border2)}
+.pin-key:active{transform:scale(.93)}
+.pin-key.del{font-size:13px;color:var(--red)}
+.pin-key.zero{grid-column:2}
+.pin-error{color:var(--red);font-size:12px;font-weight:700;min-height:18px;margin-bottom:.5rem}
+.pin-shake{animation:shake .3s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.login-loading{font-size:12px;color:var(--muted);min-height:18px;margin-bottom:.5rem}
+
+/* ── Header ── */
+.header{background:var(--dark);color:#f0ece0;padding:1rem 1.4rem;border-radius:14px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem}
+.header h1{font-size:15px;font-weight:700;letter-spacing:.03em}
+.header-sub{font-size:11px;color:#8a8478;margin-top:2px;font-family:'IBM Plex Mono',monospace}
+.header-actions{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.month-picker{background:#252525;border:1px solid #3a3a3a;color:#f0ece0;padding:5px 10px;border-radius:7px;font-family:'Sarabun',sans-serif;font-size:13px;cursor:pointer;outline:none}
+.month-picker::-webkit-calendar-picker-indicator{filter:invert(1);cursor:pointer}
+.role-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;flex-shrink:0}
+.role-cashier{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
+.role-manager{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.logout-btn{background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;color:rgba(255,255,255,.6);font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;padding:4px 9px}
+.logout-btn:hover{border-color:rgba(255,255,255,.5);color:#fff}
+.db-badge{background:#14532d;color:#86efac;font-size:10px;padding:2px 8px;border-radius:10px;font-family:'IBM Plex Mono',monospace}
+
+/* ── Alerts ── */
+.alert{border-left:3px solid;padding:.65rem 1rem;margin:.4rem 0;border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.55;display:flex;gap:.5rem;align-items:flex-start}
+.alert-warn{border-color:#d4ac0d;background:var(--amber-bg);color:#7a5500}
+.alert-danger{border-color:var(--red);background:var(--red-bg);color:var(--red)}
+.alert-ok{border-color:var(--green);background:var(--green-bg);color:var(--green)}
+.alert-info{border-color:var(--blue);background:var(--blue-bg);color:var(--blue)}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap}
+.tab{padding:7px 15px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);background:var(--white);color:#666;transition:all .15s;font-family:'Sarabun',sans-serif}
+.tab:hover{border-color:var(--border2);color:#333}
+.tab.on{background:var(--dark);color:#f0ece0;border-color:var(--dark)}
+
+/* ── Config / Balance Bar ── */
+.config-panel{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1.1rem;margin-bottom:1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.75rem 1.5rem;align-items:center}
+.cfg-group{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.cfg-label{font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
+.cfg-input{background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:5px 10px;font-family:'IBM Plex Mono',monospace;font-size:14px;width:130px;outline:none;color:var(--dark)}
+.cfg-input:focus{border-color:#999;background:var(--white)}
+.cfg-unit{font-size:12px;color:var(--muted2)}
+.diff-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;font-family:'IBM Plex Mono',monospace}
+.diff-ok{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.diff-warn{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+.diff-bad{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.btn-auto{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif}
+.btn-auto:hover{background:#d6eaf8}
+.open-lock-badge{display:none;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+
+/* ── Cards ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:1rem}
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem}
+.card-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.card-val{font-size:18px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--dark)}
+.card-val.red{color:var(--red)}.card-val.green{color:var(--green)}.card-val.amber{color:var(--amber)}.card-val.blue{color:var(--blue)}
+.card-sub{font-size:10px;color:var(--muted2);margin-top:3px}
+
+/* ── Toolbar ── */
+.toolbar{display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap;align-items:center}
+.search-box{flex:1;min-width:150px;background:var(--white);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-family:'Sarabun',sans-serif;font-size:13px;outline:none;color:var(--dark)}
+.search-box:focus{border-color:var(--border2)}
+.btn{border:none;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Sarabun',sans-serif;transition:all .14s;white-space:nowrap}
+.btn-dark{background:var(--dark);color:#f0ece0}.btn-dark:hover{background:#2d2d2d}
+.btn-outline{background:var(--white);color:#444;border:1.5px solid var(--border)}.btn-outline:hover{border-color:var(--border2);color:var(--dark)}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#196f3d}
+.btn-red{background:var(--red);color:#fff}.btn-red:hover{background:#922b21}
+.btn-amber{background:var(--amber);color:#fff}.btn-amber:hover{background:#9a6300}
+.btn-sm{padding:3px 9px;font-size:11px;border-radius:6px}
+.btn-edit{background:var(--white);color:#555;border:1px solid var(--border)}.btn-edit:hover{border-color:var(--border2);color:var(--dark)}
+.btn-del{background:var(--white);color:var(--red);border:1px solid var(--red-border)}.btn-del:hover{background:var(--red-bg)}
+
+/* ── Table ── */
+.tbl-wrap{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto;margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;min-width:540px}
+thead th{background:#f5f3ee;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
+tbody td{padding:7px 10px;border-bottom:.5px solid #f0ede6;font-size:13px;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#fafaf7}
+.locked-row td{opacity:.7}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px}
+.badge-exp{background:var(--red-bg);color:var(--red)}
+.badge-inc{background:var(--green-bg);color:var(--green)}
+.badge-lock{background:#f0f0f0;color:#999;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:3px}
+.mono{font-family:'IBM Plex Mono',monospace}
+.num-red{color:var(--red);font-family:'IBM Plex Mono',monospace}
+.num-green{color:var(--green);font-family:'IBM Plex Mono',monospace}
+.num-norm{font-family:'IBM Plex Mono',monospace}
+.num-neg{color:var(--red);font-family:'IBM Plex Mono',monospace}
+.acct-cell{font-size:12px;color:#555;line-height:1.3}
+.note-cell{font-size:11px;color:var(--muted2);margin-top:1px}
+.receipt-thumb{width:28px;height:28px;border-radius:5px;object-fit:cover;border:1px solid var(--border);cursor:pointer}
+.empty{text-align:center;padding:2.5rem;color:var(--muted2);font-size:13px}
+.tbl-footer{background:var(--dark);color:#f0ece0;padding:9px 14px;display:flex;justify-content:space-between;font-size:13px;border-radius:0 0 var(--radius) var(--radius)}
+
+/* ── Summary ── */
+.sum-box{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem}
+.sum-head{background:#f5f3ee;padding:9px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.sum-row{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:.5px solid #f0ede6;font-size:13px;gap:8px}
+.sum-row:last-child{border-bottom:none}
+.bar-bg{flex:1;height:4px;background:#f0ede6;border-radius:2px;min-width:30px}
+.bar-fill{height:4px;background:var(--red);border-radius:2px}
+.sum-amt{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--red);min-width:90px;text-align:right;flex-shrink:0}
+.sum-total{background:#f5f3ee;display:flex;justify-content:space-between;padding:10px 14px;font-weight:700;border-top:1px solid var(--border)}
+.stmt-row{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:.5px solid #f0ede6;font-size:13px}
+.stmt-row:last-child{border-bottom:none}
+.stmt-total{background:var(--dark);color:#f0ece0;display:flex;justify-content:space-between;padding:11px 14px;font-weight:700;font-size:14px}
+
+/* ── Reconcile ── */
+.rec-panel{background:var(--white);border:2px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;margin-bottom:1rem}
+.rec-panel.ok{border-color:var(--green-border);background:var(--green-bg)}
+.rec-panel.bad{border-color:var(--red-border);background:var(--red-bg)}
+.rec-title{font-weight:700;font-size:14px;margin-bottom:.6rem}
+.rec-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .75rem;font-size:13px}
+.rec-lbl{color:var(--muted)}.rec-val{font-family:'IBM Plex Mono',monospace;font-weight:700}
+
+/* ── Denom Grid (Count Cash) ── */
+.denom-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.denom-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 8px;display:flex;flex-direction:column;gap:4px;align-items:center}
+.denom-val{font-size:11px;color:var(--muted);font-weight:700}
+.denom-input{width:100%;text-align:center;font-size:16px;font-weight:600;background:var(--white);border:1.5px solid var(--border);border-radius:6px;padding:5px;font-family:'IBM Plex Mono',monospace;outline:none;color:var(--dark)}
+.denom-input:focus{border-color:#999}
+
+/* ── Audit trail ── */
+.audit-item{padding:7px 14px;border-bottom:.5px solid #f0ede6;font-size:12px;display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+.audit-item:last-child{border-bottom:none}
+.audit-time{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted2);white-space:nowrap;padding-top:2px;min-width:120px}
+.audit-txt{flex:1;color:#555}
+.audit-action{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;flex-shrink:0}
+.audit-add{background:var(--green-bg);color:var(--green)}
+.audit-edit{background:var(--amber-bg);color:var(--amber)}
+.audit-del{background:var(--red-bg);color:var(--red)}
+.audit-lock{background:var(--blue-bg);color:var(--blue)}
+
+/* ── Modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:500;padding:1rem;opacity:0;pointer-events:none;transition:opacity .18s}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:var(--white);border-radius:14px;padding:1.5rem;width:100%;max-width:460px;box-shadow:0 12px 50px rgba(0,0,0,.22);transform:translateY(16px);transition:transform .18s;max-height:92vh;overflow-y:auto}
+.modal-bg.open .modal{transform:translateY(0)}
+.modal h2{font-size:16px;font-weight:700;margin-bottom:1.2rem}
+.field{margin-bottom:.85rem;position:relative}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.field input,.field select,.field textarea{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'Sarabun',sans-serif;font-size:14px;color:var(--dark);outline:none;transition:border .12s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#999;background:var(--white)}
+.field select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M6 8L0 0h12z' fill='%23888'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.field textarea{resize:vertical;height:56px;font-size:13px}
+.type-row{display:flex;gap:6px}
+.type-btn{flex:1;padding:8px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:var(--white);font-family:'Sarabun',sans-serif;transition:all .14s}
+.type-btn.exp{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.type-btn.inc{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+.receipt-preview{margin-top:.5rem;width:100%;max-height:160px;object-fit:contain;border-radius:7px;border:1px solid var(--border);display:none}
+.modal-btns{display:flex;gap:.5rem;margin-top:1.2rem}
+.modal-btns .btn-save{flex:1;padding:9px;font-size:14px}
+.modal-btns .btn-cancel-sm{flex:0 0 78px;background:var(--white);color:#555;border:1.5px solid var(--border);border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:'Sarabun',sans-serif}
+.modal-btns .btn-cancel-sm:hover{border-color:var(--border2)}
+
+/* ── Manager PIN field ── */
+.mgr-pin-wrap{background:var(--amber-bg);border:1.5px solid var(--amber-border);border-radius:8px;padding:.75rem 1rem;margin:.5rem 0}
+.mgr-pin-wrap label{display:block;font-size:11px;font-weight:700;color:#7a5500;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.mgr-pin-inp{width:100%;background:#fff;border:1.5px solid var(--amber-border);border-radius:6px;padding:8px 11px;font-family:'IBM Plex Mono',monospace;font-size:18px;letter-spacing:.3em;text-align:center;outline:none;color:var(--dark)}
+.mgr-pin-inp:focus{border-color:#b7770d}
+.mgr-pin-status{font-size:11px;margin-top:4px;min-height:14px;font-weight:700}
+
+/* ── Image Upload ── */
+.img-upload-zone{border:2px dashed var(--border2);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.img-upload-zone:hover{border-color:var(--blue);background:rgba(26,107,181,0.04)}
+.img-upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.img-preview{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.img-thumb{position:relative;border-radius:8px;overflow:hidden;aspect-ratio:4/3}
+.img-thumb img{width:100%;height:100%;object-fit:cover}
+.img-del{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);border:none;color:#fff;width:20px;height:20px;border-radius:50%;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center}
+.compress-info{font-size:11px;color:var(--green);margin-top:4px}
+
+/* ── Lightbox ── */
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:900;opacity:0;pointer-events:none;transition:opacity .18s}
+.lightbox.open{opacity:1;pointer-events:all}
+.lightbox img{max-width:92vw;max-height:88vh;border-radius:8px;object-fit:contain}
+
+/* ── Toast / Loading ── */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--dark);color:#f0ece0;border-radius:10px;padding:10px 16px;font-size:13px;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;z-index:9999;max-width:280px}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.success{border-left:3px solid var(--green)}
+#toast.error{border-left:3px solid var(--red)}
+.loading-overlay{position:fixed;inset:0;background:rgba(245,243,238,.75);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:998;gap:12px}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--dark);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-txt{font-size:13px;color:var(--muted)}
+
+/* ── Period Status Bar ── */
+.period-bar{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:.6rem 1rem;margin-bottom:.75rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px}
+.period-bar .period-info{flex:1;color:var(--muted)}
+.period-locked-badge{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:6px;padding:2px 10px;font-size:11px;font-weight:700}
+.period-open-badge{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);border-radius:6px;padding:2px 10px;font-size:11px;font-weight:700}
+
+/* ── Export ── */
+.export-section{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;margin-bottom:1rem}
+.export-section h3{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.85rem}
+.export-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.export-btn-card{border:1.5px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;cursor:pointer;background:var(--white);font-family:'Sarabun',sans-serif;text-align:left;transition:all .15s}
+.export-btn-card:hover{border-color:var(--border2);background:var(--bg);transform:translateY(-1px);box-shadow:var(--shadow)}
+.export-btn-card .icon{font-size:20px;margin-bottom:5px}
+.export-btn-card .label{font-size:13px;font-weight:600;color:var(--dark)}
+.export-btn-card .desc{font-size:11px;color:var(--muted);margin-top:2px}
+.manager-zone{border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem}
+.manager-zone h4{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+
+/* ── Carry Forward ── */
+.carry-box{background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--blue);display:flex;align-items:center;gap:6px;margin-bottom:8px}
+
+/* ── SQL Schema Hint ── */
+.schema-box{background:#f8f8f8;border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#555;line-height:1.8;margin-bottom:1rem;overflow-x:auto}
+
+@media print{
+  .no-print{display:none!important}
+  .app{max-width:100%;padding:0}
+  .header{background:#fff!important;color:#000!important;border:2px solid #1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .header h1,.header-sub{color:#1a1a1a!important}
+  .tbl-wrap,.sum-box,.rec-panel,.cards{break-inside:avoid;page-break-inside:avoid}
+  table tr{page-break-inside:avoid;break-inside:avoid}
+  table td,table th{font-size:11px!important;padding:4px 6px!important}
+  .cards{grid-template-columns:repeat(5,1fr)!important}
+  .alert{break-inside:avoid}
+  .config-panel{display:none}
+  body{font-size:12px}
+}
+@media(max-width:520px){
+  .cards{grid-template-columns:1fr 1fr}
+  .config-panel{grid-template-columns:1fr}
+  table{font-size:12px}
+  .denom-grid{grid-template-columns:repeat(2,1fr)}
+}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ─── LOGIN SCREEN ─── -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box" id="loginBox">
+    <div class="login-logo">KMMH — กิจมั่งมีโฮม</div>
+    <div class="login-title">ระบบเงินสดย่อย</div>
+    <div class="login-sub" id="loginSub">กรอก PIN เพื่อเข้าใช้งาน</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+    <div class="login-loading" id="loginLoading"></div>
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key del" onclick="pinDel()">⌫ ลบ</button>
+      <button class="pin-key zero" onclick="pinKey('0')">0</button>
+    </div>
+    <div style="font-size:10px;color:var(--muted2);margin-top:.25rem">v4 · Cloud · Supabase</div>
+  </div>
+</div>
+
+<!-- ─── MAIN APP ─── -->
+<div class="app" id="mainApp" style="display:none">
+
+<!-- Header -->
+<div class="header no-print">
+  <div>
+    <h1>⚕ KMMH — ระบบเงินสดย่อย <span class="db-badge">☁ Supabase</span></h1>
+    <div class="header-sub" id="headerSub">ใบสรุปรายการ</div>
+  </div>
+  <div class="header-actions">
+    <span id="roleBadge" class="role-badge role-cashier" style="display:none"></span>
+    <input type="month" id="monthPicker" class="month-picker">
+    <button class="btn btn-outline no-print" style="font-size:12px;background:transparent;color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" onclick="exportCSV()">📊 CSV</button>
+    <button class="logout-btn no-print" onclick="doLogout()" title="ออกจากระบบ">🔓 ออก</button>
+  </div>
+</div>
+
+<!-- Alerts -->
+<div id="alertArea"></div>
+
+<!-- Period Status Bar -->
+<div class="period-bar no-print" id="periodBar" style="display:none">
+  <span id="periodInfo" class="period-info"></span>
+  <span id="periodStatusBadge"></span>
+  <div style="display:flex;gap:6px;margin-left:auto" id="periodActions"></div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs no-print">
+  <button class="tab on" onclick="switchTab('entries')">📋 บันทึกรายการ</button>
+  <button class="tab"    onclick="switchTab('count')">💰 นับเงินจริง</button>
+  <button class="tab"    onclick="switchTab('summary')">📊 สรุปเดือน</button>
+  <button class="tab"    onclick="switchTab('reconcile')">✅ ตรวจนับ</button>
+  <button class="tab"    onclick="switchTab('audit')">🔒 ประวัติ</button>
+  <button class="tab"    onclick="switchTab('export')">📤 Export</button>
+</div>
+
+<!-- Config bar -->
+<div class="config-panel no-print">
+  <div class="cfg-group">
+    <span class="cfg-label">ยอดยกมาต้นงวด</span>
+    <input type="number" id="openingInput" class="cfg-input" placeholder="0" oninput="onOpeningChange()">
+    <button class="btn-auto no-print" onclick="autoOpening()" title="ดึงยอดจากเดือนที่แล้ว">↩ ดึงอัตโนมัติ</button>
+    <span class="cfg-unit">บาท</span>
+    <span class="open-lock-badge" id="openLockBadge">🔒 ล็อก</span>
+  </div>
+  <div class="cfg-group">
+    <span class="cfg-label">นับเงินจริงได้</span>
+    <input type="number" id="actualInput" class="cfg-input" placeholder="ยังไม่ได้นับ" oninput="onActualChange()">
+    <span class="cfg-unit">บาท</span>
+    <div id="diffBadge"></div>
+  </div>
+</div>
+
+<!-- Cards -->
+<div class="cards" id="cards"></div>
+
+<!-- ─── VIEW: ENTRIES ─── -->
+<div id="view-entries">
+  <div class="toolbar no-print">
+    <input type="text" id="searchBox" class="search-box" placeholder="ค้นหา รหัสบัญชี / หมายเหตุ / วันที่..." oninput="renderTable()">
+    <select id="filterType" class="search-box" style="flex:0 0 110px" onchange="renderTable()">
+      <option value="">ทุกประเภท</option>
+      <option value="expense">รายจ่าย</option>
+      <option value="income">รับเงิน</option>
+    </select>
+    <button class="btn btn-dark" onclick="openForm()">+ เพิ่มรายการ</button>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:82px">วันที่</th>
+        <th style="width:52px">ประเภท</th>
+        <th style="width:110px;text-align:right">จำนวน (บาท)</th>
+        <th>บัญชี / หมายเหตุ</th>
+        <th style="width:36px;text-align:center">ใบ</th>
+        <th style="width:110px;text-align:right">คงเหลือ</th>
+        <th style="width:110px" class="no-print"></th>
+      </tr></thead>
+      <tbody id="entryTbody"></tbody>
+    </table>
+  </div>
+  <div id="tblFooter"></div>
+</div>
+
+<!-- ─── VIEW: COUNT CASH ─── -->
+<div id="view-count" style="display:none">
+  <div class="sum-box">
+    <div class="sum-head">💰 นับเงินสดจริง — กรอกจำนวนแต่ละชนิด</div>
+    <div style="padding:1rem">
+      <div class="denom-grid">
+        <div class="denom-item"><div class="denom-val">฿1,000</div><input type="number" min="0" value="0" class="denom-input" data-val="1000" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿500</div><input type="number" min="0" value="0" class="denom-input" data-val="500" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿100</div><input type="number" min="0" value="0" class="denom-input" data-val="100" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿50</div><input type="number" min="0" value="0" class="denom-input" data-val="50" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿20</div><input type="number" min="0" value="0" class="denom-input" data-val="20" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿10</div><input type="number" min="0" value="0" class="denom-input" data-val="10" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿5</div><input type="number" min="0" value="0" class="denom-input" data-val="5" oninput="calcCount()"></div>
+        <div class="denom-item"><div class="denom-val">฿1</div><input type="number" min="0" value="0" class="denom-input" data-val="1" oninput="calcCount()"></div>
+      </div>
+      <div style="display:flex;gap:16px;align-items:center;padding:12px;background:var(--bg);border-radius:10px;margin-bottom:12px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--muted)">ยอดบัญชี</div><div style="font-size:20px;font-weight:700;color:var(--blue);font-family:'IBM Plex Mono',monospace" id="countBal">0.00</div></div>
+        <div style="font-size:20px;color:var(--border2)">vs</div>
+        <div><div style="font-size:11px;color:var(--muted)">นับจริงได้</div><div style="font-size:20px;font-weight:700;color:var(--amber);font-family:'IBM Plex Mono',monospace" id="countReal">0.00</div></div>
+        <div style="margin-left:auto"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">ผลต่าง</div><div id="countDiffBadge" class="diff-badge diff-ok">± 0.00</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-dark" onclick="saveCountRecord()">✅ บันทึกการนับ + ปิดยอด</button>
+        <button class="btn btn-outline" onclick="clearCount()">ล้าง</button>
+      </div>
+    </div>
+  </div>
+  <div class="sum-box">
+    <div class="sum-head">ประวัติการนับเงิน (รายรอบ)</div>
+    <div id="countHistory"></div>
+  </div>
+</div>
+
+<!-- ─── VIEW: SUMMARY ─── -->
+<div id="view-summary" style="display:none">
+  <div class="sum-box">
+    <div class="sum-head">สรุปค่าใช้จ่ายตามประเภทบัญชี</div>
+    <div id="summaryByAcct"></div>
+  </div>
+  <div class="sum-box">
+    <div class="sum-head">งบสรุปเงินสดย่อยประจำเดือน</div>
+    <div id="stmtRows"></div>
+  </div>
+</div>
+
+<!-- ─── VIEW: RECONCILE ─── -->
+<div id="view-reconcile" style="display:none">
+  <div class="rec-panel" id="recPanel">
+    <div class="rec-title" id="recTitle">📋 ตรวจนับเงินสดย่อย</div>
+    <p style="font-size:12.5px;color:#666;line-height:1.6;margin-bottom:.75rem">กรอกยอดเงินที่นับจริงในช่อง <strong>"นับเงินจริงได้"</strong> ด้านบน ระบบเปรียบเทียบให้อัตโนมัติ</p>
+    <div class="rec-grid" id="recGrid"></div>
+  </div>
+  <div class="sum-box">
+    <div class="sum-head">ประวัติการนับเงิน (จาก Supabase)</div>
+    <div id="chkHistory"></div>
+  </div>
+</div>
+
+<!-- ─── VIEW: AUDIT ─── -->
+<div id="view-audit" style="display:none">
+  <div class="sum-box">
+    <div class="sum-head">
+      <span>บันทึกการเปลี่ยนแปลงทั้งหมด (Audit Trail)</span>
+      <button class="btn btn-sm btn-outline no-print" onclick="exportAuditTXT()">⬇ Export .txt</button>
+    </div>
+    <div id="auditList"></div>
+  </div>
+  <div style="padding:.75rem 14px;font-size:11px;color:var(--muted2)">⚠️ รายการหลังปิดยอดจะถูกล็อก ไม่สามารถแก้ไขหรือลบได้</div>
+</div>
+
+<!-- ─── VIEW: EXPORT ─── -->
+<div id="view-export" style="display:none">
+  <div class="export-section">
+    <h3>📤 Export ข้อมูลเดือนนี้</h3>
+    <div class="export-grid">
+      <button class="export-btn-card" onclick="exportCSV()">
+        <div class="icon">📊</div>
+        <div class="label">CSV (Excel)</div>
+        <div class="desc">ไฟล์ .csv เปิดใน Excel ได้โดยไม่เตือน</div>
+      </button>
+      <button class="export-btn-card" onclick="exportXLSX()">
+        <div class="icon">📋</div>
+        <div class="label">Excel XML (4 Sheets)</div>
+        <div class="desc">ครบทุกหน้า รายการ, สรุป, นับเงิน, Audit</div>
+      </button>
+      <button class="export-btn-card" onclick="exportPDF()">
+        <div class="icon">📄</div>
+        <div class="label">PDF / พิมพ์</div>
+        <div class="desc">รายงานสวยงาม พร้อมพิมพ์</div>
+      </button>
+      <button class="export-btn-card" onclick="exportAuditTXT()">
+        <div class="icon">🔍</div>
+        <div class="label">Audit Trail (.txt)</div>
+        <div class="desc">ประวัติการแก้ไขทั้งหมด</div>
+      </button>
+    </div>
+    <div class="manager-zone" id="managerZone" style="display:none">
+      <h4>⚙️ จัดการงวด (Manager เท่านั้น)</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอด + เริ่มเดือนใหม่</button>
+        <button class="btn btn-outline" onclick="autoBackup()">💾 Backup JSON</button>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">การปิดยอดจะล็อกรายการเดือนนี้ และสร้างงวดใหม่เดือนถัดไปโดยอัตโนมัติ</div>
+    </div>
+  </div>
+  <div class="export-section">
+    <h3>🛠 SQL Schema สำหรับ Supabase</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">รันใน Supabase SQL Editor เพื่อสร้างตารางที่จำเป็น:</div>
+    <div class="schema-box" id="schemaBox">กดปุ่มด้านล่างเพื่อดู Schema</div>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="showSchema()">แสดง SQL Schema</button>
+    <button class="btn btn-outline btn-sm" style="margin-top:8px;margin-left:6px" onclick="copySchema()">Copy Schema</button>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ─── FORM MODAL ─── -->
+<div class="modal-bg" id="formModal">
+<div class="modal">
+  <h2 id="formTitle">เพิ่มรายการใหม่</h2>
+  <div class="field">
+    <label>วันที่</label>
+    <input type="date" id="fDate">
+  </div>
+  <div class="field">
+    <label>ประเภท</label>
+    <div class="type-row">
+      <button id="btnExp" class="type-btn exp" onclick="setType('expense')">💸 รายจ่าย</button>
+      <button id="btnInc" class="type-btn" onclick="setType('income')">💰 รับเงิน (เติม)</button>
+    </div>
+  </div>
+  <div class="field">
+    <label>จำนวนเงิน (บาท)</label>
+    <input type="number" id="fAmount" min="0" step="1" placeholder="0">
+  </div>
+  <div class="field">
+    <label>ประเภทบัญชี</label>
+    <select id="fAcct">
+      <option value="">— เลือกรหัสบัญชี —</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>หมายเหตุ (ไม่บังคับ)</label>
+    <textarea id="fNote" placeholder="รายละเอียดเพิ่มเติม..."></textarea>
+  </div>
+  <div class="field">
+    <label>แนบรูปใบเสร็จ (auto-compress ≤200KB)</label>
+    <div class="img-upload-zone" id="dropZone">
+      <input type="file" accept="image/*" multiple onchange="handleFiles(this.files)">
+      <div style="pointer-events:none">
+        <div style="font-size:24px;margin-bottom:4px">📎</div>
+        <div style="color:var(--muted);font-size:13px">คลิกหรือลากไฟล์รูปมาวาง</div>
+        <div style="color:var(--muted2);font-size:11px;margin-top:2px">JPG, PNG — บีบอัดอัตโนมัติ</div>
+      </div>
+    </div>
+    <div id="imgPreview" class="img-preview"></div>
+    <div id="compressInfo" class="compress-info"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeForm()">ยกเลิก</button>
+    <button class="btn btn-dark btn-save" onclick="saveEntry()">💾 บันทึก</button>
+  </div>
+</div>
+</div>
+
+<!-- ─── CLOSE MONTH MODAL ─── -->
+<div class="modal-bg" id="closeMonthModal">
+<div class="modal">
+  <h2>🔒 ปิดยอดประจำเดือน</h2>
+  <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#7a5500;margin-bottom:1rem;line-height:1.7">
+    ⚠️ การปิดยอดจะ <strong>ล็อกรายการทั้งหมด</strong>ในเดือนนี้ และยอดคงเหลือจะถูกยกไปเป็นยอดเปิดเดือนถัดไปโดยอัตโนมัติ
+  </div>
+  <div class="field">
+    <label>ยอดตามบัญชี (บาท)</label>
+    <input type="number" id="cmBook" readonly style="background:#f0f0f0;color:#555;font-family:'IBM Plex Mono',monospace">
+  </div>
+  <div class="field">
+    <label>นับเงินจริงได้ (บาท)</label>
+    <input type="number" id="cmActual" placeholder="0" oninput="previewCloseMonth()">
+  </div>
+  <div id="cmDiffPreview"></div>
+  <div class="field">
+    <label>หมายเหตุ (กรณียอดไม่ตรง ต้องอธิบาย)</label>
+    <textarea id="cmNote" placeholder="อธิบายสาเหตุที่ยอดต่างกัน..."></textarea>
+  </div>
+  <div class="mgr-pin-wrap">
+    <label>🔑 รหัสผู้จัดการ (Manager PIN) — จำเป็น</label>
+    <input type="password" id="cmMgrPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCmMgrPin()" autocomplete="off">
+    <div class="mgr-pin-status" id="cmMgrPinStatus"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('closeMonthModal')">ยกเลิก</button>
+    <button class="btn btn-dark btn-save" id="btnSaveCloseMonth" onclick="confirmCloseMonth()" disabled style="opacity:.4;cursor:not-allowed">🔒 รอรหัสผู้จัดการ</button>
+  </div>
+</div>
+</div>
+
+<!-- ─── LIGHTBOX ─── -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="receipt">
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+// CONFIG — Supabase
+// ══════════════════════════════════════════════
+const SUPABASE_URL = 'https://hfystbdqjhftrlelmkjm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmeXN0YmRxamhmdHJsZWxta2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTc3MDUsImV4cCI6MjA5NDczMzcwNX0.cyRCwh0G6ArSevhsKa6kmPnYhLRRJYrxhlH0ED_JJaE';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ══════════════════════════════════════════════
+// ACCOUNTS (รหัสบัญชี KMMH จริง)
+// ══════════════════════════════════════════════
+const ACCOUNTS = [
+  {code:"1111-10",name:"เงินสด - คืนเงินสดย่อย",group:"คืนเงิน"},
+  {code:"1111-30",name:"เงินสดย่อย (เติมเงิน)",group:"เติมเงิน"},
+  {code:"1314-10",name:"เครื่องจักร",group:"สินทรัพย์"},
+  {code:"5113-20",name:"ขนส่งเข้า - ธนภาคย์",group:"ขนส่งเข้า"},
+  {code:"5113-30",name:"ขนส่งเข้า - UR",group:"ขนส่งเข้า"},
+  {code:"5113-40",name:"ขนส่งเข้า - ก.กุงศรี",group:"ขนส่งเข้า"},
+  {code:"5113-50",name:"ขนส่งเข้า - ภัทรนคร",group:"ขนส่งเข้า"},
+  {code:"5113-60",name:"ขนส่งเข้า - ธนามัย",group:"ขนส่งเข้า"},
+  {code:"5113-70",name:"ขนส่งเข้า - สุภาพร",group:"ขนส่งเข้า"},
+  {code:"5113-80",name:"ขนส่งเข้า - นครเขื่อนขันธุ์",group:"ขนส่งเข้า"},
+  {code:"5113-90",name:"ขนส่งเข้า - รถเหมา/เทลเลอร์/สิบล้อ",group:"ขนส่งเข้า"},
+  {code:"5211-10",name:"เงินเดือน",group:"บุคลากร"},
+  {code:"5211-20",name:"ค่าจ้าง - ช่างทำวงกบ",group:"บุคลากร"},
+  {code:"5221-30",name:"ค่าพาหนะ / ค่าน้ำมัน",group:"ค่าใช้จ่ายทั่วไป"},
+  {code:"5221-40",name:"ค่าเบี้ยเลี้ยง - ค่าเที่ยว/เบี้ยขยัน/ทิป",group:"ค่าใช้จ่ายทั่วไป"},
+  {code:"5221-50",name:"ค่าภาษี/ต่อทะเบียน",group:"ค่าใช้จ่ายทั่วไป"},
+  {code:"5221-60",name:"ค่าอาหารและเครื่องดื่ม",group:"ค่าใช้จ่ายทั่วไป"},
+  {code:"5221-70",name:"ค่าของไหว้",group:"ค่าใช้จ่ายทั่วไป"},
+  {code:"5222-10",name:"ค่าขนส่งออก",group:"ขนส่งออก"},
+  {code:"5231-50",name:"ค่าซ่อมแซม - เครื่องจักร",group:"ซ่อมแซม"},
+  {code:"5275-10",name:"ค่าการกุศล",group:"อื่นๆ"},
+  {code:"5277-70",name:"ค่าใช้จ่ายเบ็ดเตล็ด",group:"อื่นๆ"},
+  {code:"5277-77",name:"แลกเงิน",group:"อื่นๆ"},
+  {code:"5277-80",name:"ค่าใช้จ่าย - ที่หายไป",group:"⚠️ ตรวจสอบ"},
+];
+const MONTHS_TH=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let currentRole = null;      // null | 'cashier' | 'manager'
+let currentUser = null;      // row from petty_cash_users
+let pinBuffer = '';
+let month = '';              // 'YYYY-MM'
+let currentPeriod = null;    // row from petty_cash_periods
+let transactions = [];       // rows from petty_cash_transactions
+let countRecords = [];        // rows from petty_cash_counts
+let auditLog = [];           // rows from petty_cash_audit
+let actualCash = '';         // typed actual cash (not yet saved)
+let editTxId = null;         // uuid of tx being edited
+let pendingFiles = [];       // File objects รอ upload ไป Supabase Storage
+let pendingPreviews = [];    // blob URL สำหรับ preview เท่านั้น (ไม่เก็บ base64)
+let existingImageUrls = [];  // Public URL ของรูปเก่า (กรณี edit tx)
+let formType = 'expense';
+
+// ══════════════════════════════════════════════
+// PIN LOGIN — Auth via Supabase petty_cash_users
+// ══════════════════════════════════════════════
+function pinKey(k){
+  if(pinBuffer.length>=4) return;
+  pinBuffer+=k;
+  updatePinDots();
+  if(pinBuffer.length===4) setTimeout(submitPin,120);
+}
+function pinDel(){
+  pinBuffer=pinBuffer.slice(0,-1);
+  updatePinDots();
+  document.getElementById('pinError').textContent='';
+}
+function updatePinDots(){
+  for(let i=0;i<4;i++)
+    document.getElementById('d'+i).classList.toggle('filled',i<pinBuffer.length);
+}
+
+// ── Rate-limit guard: ป้องกัน brute-force PIN ──
+let _loginAttempts = 0;
+let _loginLockedUntil = 0;
+
+async function submitPin(){
+  // ตรวจ lockout ก่อน
+  if(Date.now() < _loginLockedUntil){
+    const remain = Math.ceil((_loginLockedUntil - Date.now()) / 1000);
+    showLoginError(`🔒 ลองใหม่ใน ${remain} วินาที`);
+    return;
+  }
+  const pin=pinBuffer;
+  pinBuffer='';
+  updatePinDots();
+  setLoginLoading('⏳ กำลังตรวจสอบ...');
+  try{
+    // Query Supabase — ไม่มี PIN ใดๆ อยู่ในโค้ด
+    const {data,error}=await sb
+      .from('petty_cash_users')
+      .select('id,name,role,is_active')
+      .eq('pin_value',pin)
+      .eq('is_active',true)
+      .maybeSingle();   // maybeSingle: ไม่ throw ถ้าไม่เจอ
+    if(!data){
+      _loginAttempts++;
+      // ล็อก 30 วิ หลังพิมพ์ผิด 5 ครั้ง
+      if(_loginAttempts >= 5){
+        _loginLockedUntil = Date.now() + 30_000;
+        _loginAttempts = 0;
+        showLoginError('🔒 ป้อน PIN ผิดหลายครั้ง — รอ 30 วินาที');
+      } else {
+        showLoginError(`❌ PIN ไม่ถูกต้อง (${_loginAttempts}/5)`);
+      }
+      setLoginLoading('');
+      return;
+    }
+    // สำเร็จ — รีเซ็ต counter
+    _loginAttempts = 0;
+    currentUser = data;
+    currentRole = data.role; // 'cashier' | 'manager'
+    setLoginLoading('');
+    await enterApp();
+  }catch(e){
+    showLoginError('❌ เชื่อมต่อ Supabase ล้มเหลว: '+e.message);
+    setLoginLoading('');
+  }
+}
+
+function showLoginError(msg){
+  document.getElementById('pinError').textContent=msg;
+  const box=document.getElementById('loginBox');
+  box.classList.add('pin-shake');
+  setTimeout(()=>box.classList.remove('pin-shake'),350);
+  setTimeout(()=>document.getElementById('pinError').textContent='',3500);
+}
+function setLoginLoading(msg){
+  document.getElementById('loginLoading').textContent=msg;
+}
+
+async function enterApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('mainApp').style.display='block';
+  // Role badge
+  const badge=document.getElementById('roleBadge');
+  badge.style.display='inline-flex';
+  if(currentRole==='manager'){
+    badge.textContent='👑 '+(currentUser.name||'Manager');
+    badge.className='role-badge role-manager';
+  } else {
+    badge.textContent='👤 '+(currentUser.name||'Cashier');
+    badge.className='role-badge role-cashier';
+  }
+  // Manager zone in export
+  document.getElementById('managerZone').style.display=currentRole==='manager'?'block':'none';
+  // Init month
+  const d=new Date();
+  month=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  document.getElementById('monthPicker').value=month;
+  document.getElementById('monthPicker').addEventListener('change',async e=>{
+    month=e.target.value;
+    await loadPeriodForMonth();
+    render();
+  });
+  // Populate account dropdown
+  const sel=document.getElementById('fAcct');
+  const groups={};
+  ACCOUNTS.forEach(a=>{ if(!groups[a.group]) groups[a.group]=[]; groups[a.group].push(a); });
+  Object.entries(groups).forEach(([g,items])=>{
+    const og=document.createElement('optgroup'); og.label=g;
+    items.forEach(a=>{ const o=document.createElement('option'); o.value=a.code+' '+a.name; o.textContent=a.code+' — '+a.name; og.appendChild(o); });
+    sel.appendChild(og);
+  });
+  showLoading(true,'กำลังโหลดข้อมูล...');
+  await loadPeriodForMonth();
+  // บันทึก audit หลัง period โหลดแล้ว พร้อมชื่อ+สิทธิ์พนักงาน
+  await addAudit('login',
+    `เข้าสู่ระบบ | สิทธิ์: ${currentRole==='manager'?'ผู้จัดการ (Manager)':'พนักงาน (Cashier)'} | ชื่อ: ${currentUser.name||'(ไม่ระบุ)'}`
+  );
+  showLoading(false);
+  render();
+}
+
+function doLogout(){
+  if(!confirm('ออกจากระบบ?')) return;
+  currentRole=null; currentUser=null; pinBuffer='';
+  updatePinDots();
+  document.getElementById('pinError').textContent='';
+  document.getElementById('loginScreen').style.display='flex';
+  document.getElementById('mainApp').style.display='none';
+  document.getElementById('roleBadge').style.display='none';
+  // Reset state
+  currentPeriod=null; transactions=[]; countRecords=[]; auditLog=[]; actualCash='';
+}
+
+// ══════════════════════════════════════════════
+// LOAD DATA — Supabase
+// ══════════════════════════════════════════════
+async function loadPeriodForMonth(){
+  showLoading(true,'โหลดข้อมูลงวด...');
+  try{
+    // หา period ที่มี month_key ตรงกับ month ที่เลือก
+    let {data:periods}=await sb.from('petty_cash_periods')
+      .select('*').eq('month_key',month).limit(1);
+
+    if(!periods||periods.length===0){
+      // ไม่มี period สำหรับเดือนนี้ → สร้างใหม่
+      // หายอดปิดเดือนก่อน (carry forward)
+      const prevM=prevMonth();
+      let carryBal=0;
+      const {data:prevPeriod}=await sb.from('petty_cash_periods')
+        .select('id,open_bal').eq('month_key',prevM).limit(1);
+      if(prevPeriod&&prevPeriod.length>0){
+        // คำนวณยอดปิดเดือนก่อน
+        const {data:prevTx}=await sb.from('petty_cash_transactions')
+          .select('tx_type,amount').eq('period_id',prevPeriod[0].id);
+        const prevIn=(prevTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
+        const prevOut=(prevTx||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0);
+        carryBal=(parseFloat(prevPeriod[0].open_bal)||0)+prevIn-prevOut;
+      }
+      // หา period_no สูงสุด
+      const {data:allP}=await sb.from('petty_cash_periods').select('period_no').order('period_no',{ascending:false}).limit(1);
+      const newNo=((allP&&allP.length>0?allP[0].period_no:0)||0)+1;
+      const {data:np,error:ne}=await sb.from('petty_cash_periods')
+        .insert({period_no:newNo,month_key:month,open_bal:carryBal,is_locked:false,created_by:currentUser?.name||currentRole})
+        .select().single();
+      if(ne) throw new Error(ne.message);
+      currentPeriod=np;
+      showToast(`สร้างงวดเดือน ${monthLabel()} (ยอดยกมา: ${fmt(carryBal)} บาท)`,'success');
+    } else {
+      currentPeriod=periods[0];
+    }
+    await loadTransactions();
+    await loadCounts();
+    await loadAudit();
+    // Sync actualCash from latest count
+    if(countRecords.length>0){
+      actualCash=String(countRecords[0].bal_real);
+    }
+    document.getElementById('periodBar').style.display='flex';
+  }catch(e){
+    showToast('โหลดข้อมูลล้มเหลว: '+e.message,'error');
+  }
+  showLoading(false);
+}
+
+async function loadTransactions(){
+  if(!currentPeriod) return;
+  const {data,error}=await sb.from('petty_cash_transactions')
+    .select('*').eq('period_id',currentPeriod.id)
+    .order('tx_date',{ascending:true}).order('created_at',{ascending:true});
+  transactions=data||[];
+}
+async function loadCounts(){
+  if(!currentPeriod) return;
+  const {data}=await sb.from('petty_cash_counts')
+    .select('*').eq('period_id',currentPeriod.id)
+    .order('counted_at',{ascending:false});
+  countRecords=data||[];
+}
+async function loadAudit(){
+  if(!currentPeriod) return;
+  const {data}=await sb.from('petty_cash_audit')
+    .select('*').eq('period_id',currentPeriod.id)
+    .order('logged_at',{ascending:false}).limit(200);
+  auditLog=data||[];
+}
+
+async function addAudit(action, description){
+  // ถ้า period ยังไม่โหลด (เช่น ตอน login ก่อน loadPeriodForMonth) ให้ข้ามไปก่อน
+  if(!currentPeriod) return;
+  try{
+    await sb.from('petty_cash_audit').insert({
+      period_id : currentPeriod.id,
+      action,
+      description,
+      by_role  : currentRole,
+      by_name  : currentUser?.name || currentRole || 'unknown'
+    });
+    await loadAudit();
+  }catch(e){ console.warn('audit error', e); }
+}
+
+// ══════════════════════════════════════════════
+// COMPUTED
+// ══════════════════════════════════════════════
+function totalInc(){ return transactions.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0); }
+function totalExp(){ return transactions.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0); }
+function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-totalExp(); }
+
+function lockCutoff(){
+  // ถ้า period ถูกล็อกแล้ว ทุก tx ถูกล็อก
+  if(currentPeriod?.is_locked) return '9999-12-31';
+  // lock cutoff = max counted_at in countRecords
+  if(!countRecords.length) return null;
+  return countRecords.reduce((mx,c)=>{
+    const d=c.counted_at?c.counted_at.split('T')[0]:'';
+    return d>mx?d:mx;
+  },'');
+}
+function isTxLocked(tx){
+  const lc=lockCutoff();
+  return lc && tx.tx_date<=lc;
+}
+
+function withRunning(){
+  let bal=parseFloat(currentPeriod?.open_bal)||0;
+  return [...transactions].sort((a,b)=>{
+    if(a.tx_date!==b.tx_date) return a.tx_date.localeCompare(b.tx_date);
+    return (a.created_at||'').localeCompare(b.created_at||'');
+  }).map(tx=>{
+    const a=parseFloat(tx.amount)||0;
+    if(tx.tx_type==='income') bal+=a; else bal-=a;
+    return{...tx,runBal:bal};
+  });
+}
+
+// ══════════════════════════════════════════════
+// FORMAT
+// ══════════════════════════════════════════════
+function fmt(n,d=0){
+  if(n===''||n===null||n===undefined) return '—';
+  const v=parseFloat(n);
+  return isNaN(v)?'—':v.toLocaleString('th-TH',{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+function fmt2(n){ return fmt(n,2); }
+function fmtDate(s){
+  if(!s) return '';
+  const[y,m,d]=s.split('-');
+  return `${d}/${m}/${+y+543}`;
+}
+function todayStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function nowStr(){ return new Date().toLocaleString('th-TH'); }
+function monthLabel(){
+  if(!month) return '';
+  const[y,m]=month.split('-');
+  return `${MONTHS_TH[+m-1]} ${+y+543}`;
+}
+function prevMonth(){
+  const d=new Date(month+'-01');
+  d.setMonth(d.getMonth()-1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+// ══════════════════════════════════════════════
+// OPENING BALANCE
+// ══════════════════════════════════════════════
+async function onOpeningChange(){
+  if(currentPeriod?.is_locked){ showToast('งวดนี้ถูกล็อกแล้ว','error'); return; }
+  if(transactions.length>0){ showToast('มีรายการแล้ว ไม่สามารถแก้ยอดเปิดได้','error'); return; }
+  const v=parseFloat(document.getElementById('openingInput').value)||0;
+  await sb.from('petty_cash_periods').update({open_bal:v}).eq('id',currentPeriod.id);
+  currentPeriod.open_bal=v;
+  await addAudit('edit',`ตั้งยอดเปิดรอบ: ${fmt2(v)} บาท`);
+  renderCards(); renderDiff();
+  showToast('บันทึกยอดเปิดรอบแล้ว','success');
+}
+
+async function autoOpening(){
+  if(transactions.length>0){
+    if(!confirm('มีรายการอยู่แล้ว\nการดึงยอดยกมาจะกระทบยอดคงเหลือทั้งหมด\nยืนยัน?')) return;
+  }
+  showLoading(true,'ดึงยอดจากเดือนก่อน...');
+  try{
+    const pm=prevMonth();
+    const {data:prevP}=await sb.from('petty_cash_periods').select('id,open_bal').eq('month_key',pm).limit(1);
+    if(!prevP||prevP.length===0){ showToast('ไม่พบข้อมูลเดือนก่อน','error'); showLoading(false); return; }
+    const {data:prevTx}=await sb.from('petty_cash_transactions').select('tx_type,amount').eq('period_id',prevP[0].id);
+    const pIn=(prevTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
+    const pOut=(prevTx||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0);
+    const carry=(parseFloat(prevP[0].open_bal)||0)+pIn-pOut;
+    await sb.from('petty_cash_periods').update({open_bal:carry}).eq('id',currentPeriod.id);
+    currentPeriod.open_bal=carry;
+    document.getElementById('openingInput').value=carry;
+    await addAudit('edit',`ดึงยอดยกมาอัตโนมัติจากเดือน ${pm} = ${fmt2(carry)} บาท`);
+    render();
+    showToast(`ดึงยอดยกมา ${fmt2(carry)} บาท สำเร็จ`,'success');
+  }catch(e){ showToast('ดึงยอดล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+function onActualChange(){
+  actualCash=document.getElementById('actualInput').value;
+  renderDiff(); renderReconcile();
+}
+
+// ══════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════
+function render(){
+  if(!currentPeriod) return;
+  const cl=closing();
+  document.getElementById('headerSub').textContent=`ใบสรุปรายการ · ${monthLabel()}`;
+  document.getElementById('openingInput').value=parseFloat(currentPeriod.open_bal)||0;
+  document.getElementById('actualInput').value=actualCash||'';
+  // Opening lock
+  const hasEntries=transactions.length>0;
+  const locked=currentPeriod.is_locked||hasEntries;
+  const openInp=document.getElementById('openingInput');
+  openInp.readOnly=locked;
+  openInp.style.background=locked?'#f0f0f0':'';
+  openInp.style.color=locked?'#999':'';
+  document.getElementById('openLockBadge').style.display=locked?'inline-block':'none';
+  // Count balance
+  document.getElementById('countBal').textContent=fmt2(cl);
+  // Period bar
+  const pbar=document.getElementById('periodInfo');
+  pbar.textContent=`งวดที่ ${currentPeriod.period_no} · เดือน ${monthLabel()}`;
+  const pstatus=document.getElementById('periodStatusBadge');
+  pstatus.innerHTML=currentPeriod.is_locked
+    ? '<span class="period-locked-badge">🔒 ปิดยอดแล้ว</span>'
+    : '<span class="period-open-badge">🟢 เปิดอยู่</span>';
+  const pact=document.getElementById('periodActions');
+  if(currentRole==='manager'&&!currentPeriod.is_locked){
+    pact.innerHTML=`<button class="btn btn-sm btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอดเดือนนี้</button>`;
+  } else { pact.innerHTML=''; }
+  renderAlerts(); renderCards(); renderDiff(); renderTable();
+  if(document.getElementById('view-summary').style.display!=='none') renderSummary();
+  if(document.getElementById('view-reconcile').style.display!=='none') renderReconcile();
+  if(document.getElementById('view-audit').style.display!=='none') renderAudit();
+  if(document.getElementById('view-count').style.display!=='none') renderCountHistory();
+}
+
+function renderAlerts(){
+  let h='';
+  if(transactions.some(e=>e.acc_code&&e.acc_code.includes('5277-80')))
+    h+=`<div class="alert alert-warn">⚠️ <span>มีรายการ <strong>"ค่าใช้จ่าย - ที่หายไป (5277-80)"</strong> ในเดือนนี้ — ควรตรวจสอบรหัสบัญชีให้ถูกต้อง</span></div>`;
+  if(withRunning().some(e=>e.runBal<-50))
+    h+=`<div class="alert alert-danger">🔴 <span>ยอดเงินสดย่อยติดลบในบางวัน — ควรเติมเงินสดย่อยทันที</span></div>`;
+  const actual=parseFloat(actualCash), book=closing();
+  if(!isNaN(actual)&&actualCash!==''){
+    const diff=actual-book;
+    if(Math.abs(diff)>0.005)
+      h+=`<div class="alert ${diff<0?'alert-danger':'alert-warn'}">${diff<0?'🔴':'🟡'} <span>ยอดเงินจริง <strong>${fmt2(actual)}</strong> บาท ${diff<0?'น้อยกว่า':'มากกว่า'}ยอดบัญชี <strong>${fmt2(book)}</strong> บาท → <strong>ต่างกัน ${fmt2(Math.abs(diff))} บาท</strong>${diff<0?' — ควรตรวจสอบด่วน':''}</span></div>`;
+    else
+      h+=`<div class="alert alert-ok">✅ <span>ยอดเงินจริงตรงกับยอดบัญชี — <strong>${fmt2(book)}</strong> บาท</span></div>`;
+  }
+  if(lockCutoff()&&lockCutoff()!=='9999-12-31')
+    h+=`<div class="alert alert-info">🔒 <span>รายการก่อนวันที่ ${fmtDate(lockCutoff())} ถูกล็อกแล้ว</span></div>`;
+  if(currentPeriod?.is_locked)
+    h+=`<div class="alert alert-info">🔒 <span><strong>งวดนี้ปิดยอดแล้ว</strong> — ไม่สามารถเพิ่ม/แก้ไข/ลบรายการได้</span></div>`;
+  document.getElementById('alertArea').innerHTML=h;
+}
+
+function renderCards(){
+  const cl=closing();
+  const actual=parseFloat(actualCash);
+  const diff=(!isNaN(actual)&&actualCash!=='')?(actual-cl):null;
+  document.getElementById('cards').innerHTML=`
+    <div class="card"><div class="card-lbl">ยอดตั้งต้น</div><div class="card-val mono">${fmt(parseFloat(currentPeriod?.open_bal)||0)}</div><div class="card-sub">บาท</div></div>
+    <div class="card"><div class="card-lbl">รับเงินเพิ่ม</div><div class="card-val green mono">${fmt(totalInc())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='income').length} รายการ</div></div>
+    <div class="card"><div class="card-lbl">รายจ่ายรวม</div><div class="card-val red mono">${fmt(totalExp())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='expense').length} รายการ</div></div>
+    <div class="card"><div class="card-lbl">ยอดตามบัญชี</div><div class="card-val ${cl<0?'red':cl<500?'amber':''} mono">${fmt(cl)}</div><div class="card-sub">บาท</div></div>
+    <div class="card"><div class="card-lbl">นับจริงได้</div><div class="card-val ${diff===null?'':diff<0?'red':diff===0?'green':'amber'} mono">${actualCash!==''?fmt(actual):'—'}</div><div class="card-sub">${diff===null?'ยังไม่ได้นับ':diff===0?'✅ ตรง':diff>0?`+${fmt(diff)} เกิน`:`${fmt(diff)} ขาด`}</div></div>
+    <div class="card"><div class="card-lbl">สถานะงวด</div><div class="card-val" style="font-size:14px">${currentPeriod?.is_locked?'🔒':'🟢'}</div><div class="card-sub">${currentPeriod?.is_locked?'ปิดยอดแล้ว':'เปิดอยู่'}</div></div>
+  `;
+}
+
+function renderDiff(){
+  const actual=parseFloat(actualCash), book=closing(), el=document.getElementById('diffBadge');
+  if(isNaN(actual)||actualCash===''){el.innerHTML='';return;}
+  const d=actual-book;
+  el.innerHTML=d===0?`<span class="diff-badge diff-ok">✅ ตรง</span>`
+    :d>0?`<span class="diff-badge diff-warn">▲ เกิน ${fmt2(d)}</span>`
+    :`<span class="diff-badge diff-bad">▼ ขาด ${fmt2(Math.abs(d))}</span>`;
+}
+
+function renderTable(){
+  const q=(document.getElementById('searchBox')?.value||'').toLowerCase();
+  const ft=document.getElementById('filterType')?.value||'';
+  let rows=withRunning();
+  if(q) rows=rows.filter(e=>(e.acc_code||'').toLowerCase().includes(q)||(e.description||'').toLowerCase().includes(q)||e.tx_date.includes(q));
+  if(ft) rows=rows.filter(e=>e.tx_type===ft);
+  const isManager=currentRole==='manager';
+  let h='';
+  if(!rows.length){ h=`<tr><td colspan="7" class="empty">ยังไม่มีรายการในเดือนนี้</td></tr>`; }
+  else rows.forEach(tx=>{
+    const locked=isTxLocked(tx);
+    const neg=tx.runBal<0;
+    // อ่าน Storage URL (ไม่ใช่ base64) จากฟิลด์ image_urls
+    let imgUrls=[];
+    try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
+    const receiptBtn=imgUrls.length>0
+      ?`<img src="${imgUrls[0]}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy">`
+      :`<span style="color:var(--muted2);font-size:11px">—</span>`;
+    const actButtons=locked
+      ?`<span style="font-size:11px;color:var(--muted2)">🔒</span>`
+      :isManager
+        ?`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`
+        :`<span style="font-size:11px;color:var(--muted2)">—</span>`;
+    h+=`<tr class="${locked?'locked-row':''}">
+      <td class="mono" style="font-size:11px">${fmtDate(tx.tx_date)}</td>
+      <td><span class="badge ${tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
+      <td style="text-align:right"><span class="${tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
+      <td><div class="acct-cell">${tx.acc_code||'<span style="color:#ccc">—</span>'}</div>${tx.description?`<div class="note-cell">${tx.description}</div>`:''}</td>
+      <td style="text-align:center">${receiptBtn}</td>
+      <td style="text-align:right"><span class="${neg?'num-neg':'num-norm'}">${fmt2(tx.runBal)}</span></td>
+      <td class="no-print"><div style="display:flex;gap:4px">${actButtons}</div></td>
+    </tr>`;
+  });
+  document.getElementById('entryTbody').innerHTML=h;
+  const exp=transactions.filter(t=>t.tx_type==='expense');
+  document.getElementById('tblFooter').innerHTML=exp.length
+    ?`<div class="tbl-footer"><span>รวมรายจ่าย ${exp.length} รายการ</span><span style="color:#f9a8a8;font-family:'IBM Plex Mono',monospace">${fmt2(totalExp())} บาท</span></div>`:'';
+}
+
+function renderSummary(){
+  const exp=totalExp();
+  const map={};
+  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  const sorted=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  let h='';
+  if(!sorted.length) h=`<div class="empty">ยังไม่มีรายการรายจ่าย</div>`;
+  sorted.forEach(([acct,total])=>{
+    const pct=exp>0?(total/exp*100):0;
+    h+=`<div class="sum-row"><div style="flex:1;font-size:12px">${acct}</div><div class="bar-bg"><div class="bar-fill" style="width:${Math.min(pct,100)}%"></div></div><div class="sum-amt">${fmt2(total)} <span style="font-size:10px;color:#bbb">${pct.toFixed(0)}%</span></div></div>`;
+  });
+  if(sorted.length) h+=`<div class="sum-total"><span>รวมรายจ่าย</span><span style="font-family:'IBM Plex Mono',monospace;color:var(--red)">${fmt2(exp)} บาท</span></div>`;
+  document.getElementById('summaryByAcct').innerHTML=h;
+  const cl=closing();
+  document.getElementById('stmtRows').innerHTML=`
+    <div class="stmt-row"><span>ยอดยกมาต้นเดือน</span><span class="mono">${fmt2(parseFloat(currentPeriod?.open_bal)||0)} บาท</span></div>
+    <div class="stmt-row"><span>รับเงินเพิ่มระหว่างเดือน</span><span class="num-green">+ ${fmt2(totalInc())} บาท</span></div>
+    <div class="stmt-row"><span>จ่ายออกระหว่างเดือน</span><span class="num-red">- ${fmt2(exp)} บาท</span></div>
+    <div class="stmt-total"><span>ยอดคงเหลือปลายเดือน</span><span class="mono" style="color:${cl<0?'#f9a8a8':'#f0ece0'}">${fmt2(cl)} บาท</span></div>`;
+}
+
+function renderReconcile(){
+  const cl=closing(), actual=parseFloat(actualCash);
+  const has=!isNaN(actual)&&actualCash!=='', diff=has?(actual-cl):null;
+  const panel=document.getElementById('recPanel'), title=document.getElementById('recTitle'), grid=document.getElementById('recGrid');
+  if(!has){ panel.className='rec-panel'; title.textContent='📋 ยังไม่ได้นับเงิน'; grid.innerHTML=`<div style="grid-column:1/-1;color:var(--muted);font-size:12.5px">กรอกยอดที่นับจริงในช่องด้านบน แล้วระบบจะเปรียบเทียบให้อัตโนมัติ</div>`; }
+  else if(Math.abs(diff)<0.005){ panel.className='rec-panel ok'; title.textContent='✅ ยอดตรง — เงินสดย่อยถูกต้อง'; grid.innerHTML=recGridHTML(cl,actual,diff); }
+  else{ panel.className='rec-panel bad'; title.innerHTML=`🔴 ยอดต่างกัน <span class="mono"> ${fmt2(Math.abs(diff))} บาท</span> — ${diff<0?'เงินขาด ต้องตรวจสอบ':'เงินเกิน ตรวจสอบรายการ'}`; grid.innerHTML=recGridHTML(cl,actual,diff); }
+  let h='';
+  if(!countRecords.length) h=`<div class="empty">ยังไม่มีประวัติการนับเงิน</div>`;
+  [...countRecords].forEach(c=>{
+    const d=parseFloat(c.diff||0);
+    const dt=c.counted_at?(c.counted_at.replace('T',' ').slice(0,16)):'—';
+    h+=`<div class="sum-row">
+      <div style="font-size:12px;min-width:100px">${dt}</div>
+      <div style="font-size:12px;color:var(--muted);flex:1">บัญชี ${fmt2(c.bal_book)} บาท</div>
+      <div style="font-size:12px;color:var(--muted)">จริง ${fmt2(c.bal_real)} บาท</div>
+      <div style="margin-left:8px"><span class="badge ${Math.abs(d)<0.005?'badge-inc':'badge-exp'}">${Math.abs(d)<0.005?'ตรง ✅':d>0?`เกิน +${fmt2(d)}`:`ขาด ${fmt2(Math.abs(d))}`}</span></div>
+    </div>`;
+    if(c.note) h+=`<div style="padding:2px 14px 6px;font-size:11px;color:var(--muted)">💬 ${c.note}</div>`;
+  });
+  document.getElementById('chkHistory').innerHTML=h;
+}
+function recGridHTML(book,actual,diff){
+  return`<div class="rec-lbl">ยอดตามบัญชี</div><div class="rec-val">${fmt2(book)} บาท</div>
+    <div class="rec-lbl">นับเงินจริงได้</div><div class="rec-val">${fmt2(actual)} บาท</div>
+    <div class="rec-lbl">ผลต่าง</div><div class="rec-val" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">${Math.abs(diff)<0.005?'ตรง ✅':diff>0?`+ ${fmt2(diff)}`:` ${fmt2(diff)}`} บาท</div>
+    <div class="rec-lbl">สถานะ</div><div class="rec-val" style="font-size:12px">${Math.abs(diff)<0.005?'เงินสดย่อยถูกต้อง':diff<0?'⚠️ เงินขาด ต้องตรวจสอบด่วน':'ℹ️ เงินเกิน ตรวจสอบรายการ'}</div>`;
+}
+
+function renderAudit(){
+  if(!auditLog.length){ document.getElementById('auditList').innerHTML=`<div class="empty">ยังไม่มีประวัติ</div>`; return; }
+  let h='';
+  auditLog.slice(0,100).forEach(a=>{
+    const cls=a.action==='add'?'audit-add':a.action==='edit'?'audit-edit':a.action==='del'?'audit-del':'audit-lock';
+    const label=a.action==='add'?'เพิ่ม':a.action==='edit'?'แก้ไข':a.action==='del'?'ลบ':a.action==='login'?'เข้าสู่ระบบ':'ล็อก';
+    const ts=a.logged_at?(a.logged_at.replace('T',' ').slice(0,16)):'—';
+    h+=`<div class="audit-item"><div class="audit-time">${ts}</div><div class="audit-txt">${a.description||a.action}</div><span class="audit-action ${cls}">${label}</span></div>`;
+  });
+  document.getElementById('auditList').innerHTML=h;
+}
+
+function renderCountHistory(){
+  if(!countRecords.length){ document.getElementById('countHistory').innerHTML=`<div class="empty">ยังไม่มีประวัติการนับเงิน</div>`; return; }
+  let h=`<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted);text-align:left">เวลา</th><th style="text-align:right;padding:6px 10px">บัญชี</th><th style="text-align:right;padding:6px 10px">จริง</th><th style="text-align:right;padding:6px 10px">ต่าง</th><th style="padding:6px 10px">หมายเหตุ</th></tr></thead><tbody>`;
+  countRecords.forEach(c=>{
+    const d=parseFloat(c.diff||0);
+    const dt=c.counted_at?(c.counted_at.replace('T',' ').slice(0,16)):'—';
+    h+=`<tr><td style="padding:5px 10px">${dt}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;padding:5px 10px">${fmt2(c.bal_book)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--amber);padding:5px 10px">${fmt2(c.bal_real)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${Math.abs(d)<0.005?'var(--green)':d>0?'var(--amber)':'var(--red)'};padding:5px 10px">${fmt2(d)}</td><td style="font-size:11px;color:var(--muted);padding:5px 10px">${c.note||'—'}</td></tr>`;
+  });
+  h+=`</tbody></table>`;
+  document.getElementById('countHistory').innerHTML=h;
+}
+
+// ══════════════════════════════════════════════
+// TAB
+// ══════════════════════════════════════════════
+function switchTab(v){
+  ['entries','count','summary','reconcile','audit','export'].forEach(t=>{
+    document.getElementById('view-'+t).style.display=t===v?'block':'none';
+  });
+  document.querySelectorAll('.tab').forEach((el,i)=>{
+    el.classList.toggle('on',['entries','count','summary','reconcile','audit','export'][i]===v);
+  });
+  if(v==='summary') renderSummary();
+  if(v==='reconcile') renderReconcile();
+  if(v==='audit') renderAudit();
+  if(v==='count') renderCountHistory();
+}
+
+// ══════════════════════════════════════════════
+// COUNT CASH
+// ══════════════════════════════════════════════
+function calcCount(){
+  const total=Array.from(document.querySelectorAll('.denom-input')).reduce((s,i)=>s+(parseInt(i.value)||0)*parseInt(i.dataset.val),0);
+  document.getElementById('countReal').textContent=fmt2(total);
+  const book=closing();
+  const diff=total-book;
+  const badge=document.getElementById('countDiffBadge');
+  badge.textContent=(diff>=0?'+':'')+fmt2(diff);
+  badge.className='diff-badge '+(Math.abs(diff)<0.005?'diff-ok':Math.abs(diff)<200?'diff-warn':'diff-bad');
+  // sync to actual input
+  actualCash=String(total);
+  document.getElementById('actualInput').value=total;
+  renderDiff();
+}
+function clearCount(){
+  document.querySelectorAll('.denom-input').forEach(i=>i.value=0);
+  calcCount();
+}
+
+async function saveCountRecord(){
+  const total=Array.from(document.querySelectorAll('.denom-input')).reduce((s,i)=>s+(parseInt(i.value)||0)*parseInt(i.dataset.val),0);
+  if(total===0&&!confirm('ยอดที่นับเป็น 0 บาท ยืนยันบันทึก?')) return;
+  const book=closing();
+  const diff=total-book;
+  if(Math.abs(diff)>0.005){
+    const note=prompt(`ยอดต่างกัน ${fmt2(Math.abs(diff))} บาท\nกรุณาระบุสาเหตุ:`,'');
+    if(note===null) return; // cancel
+    await _saveCount(book,total,diff,note||'(ไม่ระบุ)');
+  } else {
+    await _saveCount(book,total,diff,'');
+  }
+}
+async function _saveCount(book,real,diff,note){
+  showLoading(true,'บันทึกการนับเงิน...');
+  try{
+    await sb.from('petty_cash_counts').insert({
+      period_id:currentPeriod.id,
+      bal_book:book,
+      bal_real:real,
+      diff,
+      note,
+      by_role:currentRole,
+      by_name:currentUser?.name||currentRole
+    });
+    actualCash=String(real);
+    document.getElementById('actualInput').value=real;
+    await addAudit('lock',`นับเงิน: บัญชี ${fmt2(book)} บาท | จริง ${fmt2(real)} บาท | ต่าง ${fmt2(diff)} บาท${note?' | '+note:''}`);
+    await loadCounts();
+    renderCountHistory(); renderReconcile(); renderCards(); renderDiff();
+    showToast(`บันทึกการนับเงินแล้ว (${Math.abs(diff)<0.005?'ยอดตรง':'ยอดต่าง '+fmt2(Math.abs(diff))+' บาท'})`,'success');
+  }catch(e){ showToast('บันทึกล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+// ══════════════════════════════════════════════
+// FORM MODAL — Add/Edit Transaction
+// ══════════════════════════════════════════════
+function openForm(){
+  if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว ไม่สามารถเพิ่มรายการได้','error'); return; }
+  editTxId=null;
+  pendingFiles=[];
+  pendingPreviews=[];
+  existingImageUrls=[];
+  document.getElementById('formTitle').textContent='เพิ่มรายการใหม่';
+  document.getElementById('fDate').value=todayStr();
+  document.getElementById('fAmount').value='';
+  document.getElementById('fAcct').value='';
+  document.getElementById('fNote').value='';
+  document.getElementById('imgPreview').innerHTML='';
+  document.getElementById('compressInfo').textContent='';
+  setType('expense');
+  openModal('formModal');
+  setTimeout(()=>document.getElementById('fAmount').focus(),200);
+}
+
+function openEditTx(id){
+  if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว','error'); return; }
+  const tx=transactions.find(t=>t.id===id);
+  if(!tx) return;
+  if(isTxLocked(tx)){ alert('รายการนี้ถูกล็อกแล้ว ไม่สามารถแก้ไขได้'); return; }
+  editTxId=id;
+  pendingFiles=[];
+  pendingPreviews=[];
+  // โหลด URL รูปภาพเดิมที่อยู่ใน Storage
+  try{ existingImageUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{ existingImageUrls=[]; }
+  document.getElementById('formTitle').textContent='แก้ไขรายการ';
+  document.getElementById('fDate').value=tx.tx_date;
+  document.getElementById('fAmount').value=tx.amount;
+  document.getElementById('fAcct').value=tx.acc_code||'';
+  document.getElementById('fNote').value=tx.description||'';
+  setType(tx.tx_type==='income'?'income':'expense');
+  renderImgPreview();
+  openModal('formModal');
+}
+
+function setType(t){
+  formType=t;
+  document.getElementById('btnExp').className='type-btn'+(t==='expense'?' exp':'');
+  document.getElementById('btnInc').className='type-btn'+(t==='income'?' inc':'');
+}
+
+async function handleFiles(files){
+  const info=[];
+  for(const f of files){
+    // บีบอัดและสร้าง File object ใหม่สำหรับ upload
+    const compressed = await compressToFile(f);
+    pendingFiles.push(compressed.file);
+    // สร้าง blob URL สำหรับ preview เท่านั้น — ไม่เก็บ base64 ในหน่วยความจำ
+    const blobUrl = URL.createObjectURL(compressed.file);
+    pendingPreviews.push(blobUrl);
+    info.push(`${f.name}: ${(f.size/1024).toFixed(0)}→${(compressed.file.size/1024).toFixed(0)}KB`);
+  }
+  document.getElementById('compressInfo').textContent=info.join(' | ');
+  renderImgPreview();
+}
+
+function renderImgPreview(){
+  // แสดงรูปเก่า (Storage URL) + รูปใหม่ (blob URL preview)
+  const existingHTML = existingImageUrls.map((url,i)=>
+    `<div class="img-thumb">
+      <img src="${url}" loading="lazy">
+      <button class="img-del" onclick="removeExistingImg(${i})" title="ลบรูปเก่า">×</button>
+    </div>`
+  ).join('');
+  const newHTML = pendingPreviews.map((url,i)=>
+    `<div class="img-thumb">
+      <img src="${url}">
+      <button class="img-del" onclick="removePendingImg(${i})">×</button>
+    </div>`
+  ).join('');
+  document.getElementById('imgPreview').innerHTML = existingHTML + newHTML;
+}
+
+function removeExistingImg(i){
+  existingImageUrls.splice(i,1);
+  renderImgPreview();
+}
+function removePendingImg(i){
+  URL.revokeObjectURL(pendingPreviews[i]); // คืน memory
+  pendingFiles.splice(i,1);
+  pendingPreviews.splice(i,1);
+  renderImgPreview();
+}
+
+// ── บีบอัดรูปและคืน File object (ไม่ใช่ base64) ──
+async function compressToFile(file){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>COMPRESS_SIZE||h>COMPRESS_SIZE){
+          const r=Math.min(COMPRESS_SIZE/w,COMPRESS_SIZE/h);
+          w=Math.round(w*r); h=Math.round(h*r);
+        }
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        let q=COMPRESS_QUALITY;
+        function tryC(){
+          cv.toBlob(blob=>{
+            if(!blob){ resolve({file:new File([],file.name,{type:'image/jpeg'})}); return; }
+            if(blob.size<=COMPRESS_MAX || q<=0.3){
+              // แปลง Blob เป็น File object พร้อมชื่อไฟล์ที่ sanitize แล้ว
+              const ext='.jpg';
+              const safeName=`receipt_${Date.now()}_${Math.random().toString(36).slice(2,7)}${ext}`;
+              resolve({ file: new File([blob], safeName, {type:'image/jpeg'}) });
+            } else {
+              q=Math.max(0.3, q-0.1);
+              tryC();
+            }
+          },'image/jpeg',q);
+        }
+        tryC();
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── อัปโหลด File ขึ้น Supabase Storage bucket 'receipts' ──
+// คืน Public URL หรือ null ถ้าล้มเหลว
+async function uploadReceiptToStorage(file){
+  const path=`${currentPeriod.id}/${file.name}`;
+  const {error}=await sb.storage.from('receipts').upload(path, file, {
+    cacheControl:'3600',
+    upsert:false,
+    contentType:'image/jpeg'
+  });
+  if(error) throw new Error(`Storage upload failed: ${error.message}`);
+  const {data:urlData}=sb.storage.from('receipts').getPublicUrl(path);
+  return urlData?.publicUrl || null;
+}
+
+async function saveEntry(){
+  const date=document.getElementById('fDate').value;
+  const amount=parseFloat(document.getElementById('fAmount').value);
+  const acct=document.getElementById('fAcct').value;
+  const note=document.getElementById('fNote').value;
+  if(!date||!amount||amount<=0){ showToast('กรุณากรอกวันที่และจำนวนเงิน','error'); return; }
+
+  showLoading(true,'อัปโหลดรูปภาพ...');
+  try{
+    // ── Step 1: Upload รูปภาพใหม่ขึ้น Supabase Storage ──
+    const newUrls=[];
+    for(let i=0;i<pendingFiles.length;i++){
+      showLoading(true,`อัปโหลดรูปภาพ ${i+1}/${pendingFiles.length}...`);
+      try{
+        const url=await uploadReceiptToStorage(pendingFiles[i]);
+        if(url) newUrls.push(url);
+      }catch(uploadErr){
+        // ถ้า upload ล้มเหลวให้แจ้งแต่ไม่หยุด save
+        console.warn('Upload error:',uploadErr);
+        showToast(`⚠️ อัปโหลดรูป ${i+1} ไม่สำเร็จ — บันทึกรายการโดยไม่มีรูปนี้`,'error');
+      }
+    }
+
+    // รวม URL รูปเก่า (ที่ยังไม่ได้ลบ) + รูปใหม่ที่ upload สำเร็จ
+    const allImageUrls=[...existingImageUrls, ...newUrls];
+
+    showLoading(true,'บันทึกรายการ...');
+
+    // ── Step 2: บันทึกข้อมูลลง petty_cash_transactions ──
+    // เก็บเฉพาะ URL (string JSON) ไม่มี base64 อีกต่อไป
+    const payload={
+      period_id : currentPeriod.id,
+      tx_date   : date,
+      tx_type   : formType==='income'?'income':'expense',
+      acc_code  : acct,
+      description: note,
+      amount,
+      image_urls: allImageUrls.length ? JSON.stringify(allImageUrls) : null,
+      by_role   : currentRole,
+      by_name   : currentUser?.name || currentRole
+    };
+
+    // ── Step 3: Audit log พร้อม ชื่อ + สิทธิ์ ──
+    const auditDesc=`${editTxId?'แก้ไข':'เพิ่ม'}รายการ | วันที่: ${fmtDate(date)} | `+
+      `ประเภท: ${formType==='income'?'รับเงิน':'รายจ่าย'} | `+
+      `จำนวน: ${fmt2(amount)} บาท | บัญชี: ${acct} | `+
+      `ผู้ทำรายการ: ${currentUser?.name||currentRole} (${currentRole}) | `+
+      `รูปภาพ: ${allImageUrls.length} ไฟล์`;
+
+    if(editTxId){
+      const {error}=await sb.from('petty_cash_transactions').update(payload).eq('id',editTxId);
+      if(error) throw new Error(error.message);
+    } else {
+      const {error}=await sb.from('petty_cash_transactions').insert(payload);
+      if(error) throw new Error(error.message);
+    }
+    await addAudit(editTxId?'edit':'add', auditDesc);
+
+    // คืน blob URL preview memory
+    pendingPreviews.forEach(u=>URL.revokeObjectURL(u));
+    pendingFiles=[]; pendingPreviews=[]; existingImageUrls=[];
+
+    await loadTransactions();
+    closeForm();
+    render();
+    showToast('บันทึกแล้ว ☁️','success');
+  }catch(e){ showToast('บันทึกล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+async function deleteTx(id){
+  if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
+  const tx=transactions.find(t=>t.id===id);
+  if(!tx) return;
+  if(isTxLocked(tx)){ alert('รายการนี้ถูกล็อกแล้ว'); return; }
+  if(!confirm(`ลบรายการวันที่ ${fmtDate(tx.tx_date)} จำนวน ${fmt2(tx.amount)} บาท?\n(รูปภาพใบเสร็จจะถูกลบออกจาก Storage ด้วย)`)) return;
+  showLoading(true,'กำลังลบรายการ...');
+  try{
+    // ลบรูปภาพออกจาก Supabase Storage ก่อน
+    let imgUrls=[];
+    try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
+    if(imgUrls.length>0){
+      // แปลง public URL → storage path (หลัง /receipts/)
+      const paths=imgUrls.map(url=>{
+        const m=url.match(/\/receipts\/(.+)$/);
+        return m?m[1]:null;
+      }).filter(Boolean);
+      if(paths.length) await sb.storage.from('receipts').remove(paths);
+    }
+    // ลบ transaction record
+    await sb.from('petty_cash_transactions').delete().eq('id',id);
+    await addAudit('del',
+      `ลบรายการ | วันที่: ${fmtDate(tx.tx_date)} | ประเภท: ${tx.tx_type==='income'?'รับเงิน':'รายจ่าย'} | `+
+      `จำนวน: ${fmt2(tx.amount)} บาท | บัญชี: ${tx.acc_code||''} | `+
+      `ผู้ลบ: ${currentUser?.name||currentRole} (${currentRole})`
+    );
+    await loadTransactions();
+    render();
+    showToast('ลบรายการแล้ว','success');
+  }catch(e){ showToast('ลบล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+// Receipt lightbox — แสดงรูปจาก Supabase Storage URL
+function showLightboxTx(id){
+  const tx=transactions.find(t=>t.id===id);
+  if(!tx||!tx.image_urls) return;
+  try{
+    const imgs=JSON.parse(tx.image_urls);
+    if(imgs.length){
+      document.getElementById('lightboxImg').src=imgs[0];
+      document.getElementById('lightbox').classList.add('open');
+    }
+  }catch{}
+}
+function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
+
+// ══════════════════════════════════════════════
+// CLOSE MONTH
+// ══════════════════════════════════════════════
+function openCloseMonthModal(){
+  if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
+  const cl=closing();
+  document.getElementById('cmBook').value=cl;
+  document.getElementById('cmActual').value=actualCash||'';
+  document.getElementById('cmNote').value='';
+  document.getElementById('cmMgrPin').value='';
+  document.getElementById('cmMgrPinStatus').textContent='';
+  const btn=document.getElementById('btnSaveCloseMonth');
+  btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
+  previewCloseMonth();
+  openModal('closeMonthModal');
+}
+
+function previewCloseMonth(){
+  const actual=parseFloat(document.getElementById('cmActual').value);
+  const book=closing();
+  if(isNaN(actual)){ document.getElementById('cmDiffPreview').innerHTML=''; return; }
+  const diff=actual-book;
+  const cls=Math.abs(diff)<0.005?'ok':'bad';
+  document.getElementById('cmDiffPreview').innerHTML=`
+    <div style="background:${cls==='ok'?'var(--green-bg)':'var(--red-bg)'};border:1px solid ${cls==='ok'?'var(--green-border)':'var(--red-border)'};border-radius:8px;padding:10px 14px;font-size:13px;margin:.5rem 0;line-height:1.8">
+      <div style="display:flex;justify-content:space-between"><span>ยอดตามบัญชี</span><span class="mono">${fmt2(book)} บาท</span></div>
+      <div style="display:flex;justify-content:space-between"><span>นับจริงได้</span><span class="mono">${fmt2(actual)} บาท</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:4px"><span>ผลต่าง</span><span class="mono" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">${Math.abs(diff)<0.005?'ตรง ✅':diff<0?`ขาด ${fmt2(Math.abs(diff))} บาท`:`เกิน ${fmt2(diff)} บาท`}</span></div>
+    </div>`;
+}
+
+async function checkCmMgrPin(){
+  const val=document.getElementById('cmMgrPin').value;
+  const btn=document.getElementById('btnSaveCloseMonth');
+  const status=document.getElementById('cmMgrPinStatus');
+  if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ'; status.textContent=''; return; }
+  // ตรวจ PIN ผ่าน Supabase — ดึงเฉพาะ role ไม่ select *
+  try{
+    const {data}=await sb.from('petty_cash_users')
+      .select('id,name,role')
+      .eq('pin_value',val)
+      .eq('role','manager')
+      .eq('is_active',true)
+      .maybeSingle();
+    if(data){
+      btn.disabled=false; btn.style.opacity='1';
+      btn.textContent=`✅ ยืนยัน (${data.name||'Manager'})`;
+      status.textContent=`✅ ยืนยันตัวตนแล้ว: ${data.name||'Manager'}`; status.style.color='var(--green)';
+      btn._confirmedMgrId=data.id; // เก็บ id ไว้บันทึก audit
+    } else {
+      btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
+      status.textContent='❌ รหัสไม่ถูกต้อง'; status.style.color='var(--red)';
+      document.getElementById('cmMgrPin').value='';
+      btn._confirmedMgrId=null;
+    }
+  }catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
+}
+
+async function confirmCloseMonth(){
+  const actual=parseFloat(document.getElementById('cmActual').value);
+  const note=document.getElementById('cmNote').value;
+  const book=closing();
+  if(isNaN(actual)){ showToast('กรุณากรอกยอดที่นับจริง','error'); return; }
+  if(Math.abs(actual-book)>0.005&&!note.trim()){ showToast('ยอดไม่ตรง — กรุณาระบุหมายเหตุ','error'); return; }
+  showLoading(true,'กำลังปิดยอด...');
+  try{
+    // บันทึก count record
+    await sb.from('petty_cash_counts').insert({
+      period_id:currentPeriod.id,
+      bal_book:book,
+      bal_real:actual,
+      diff:actual-book,
+      note,
+      by_role:currentRole,
+      by_name:currentUser?.name||currentRole
+    });
+    // ล็อก period
+    await sb.from('petty_cash_periods').update({
+      is_locked:true,
+      locked_at:new Date().toISOString(),
+      final_bal:actual
+    }).eq('id',currentPeriod.id);
+    currentPeriod.is_locked=true;
+    await addAudit('lock',
+      `ปิดยอดเดือน ${monthLabel()} | ยอดบัญชี: ${fmt2(book)} บาท | นับจริง: ${fmt2(actual)} บาท | ต่าง: ${fmt2(actual-book)} บาท | `+
+      `ผู้อนุมัติ: ${document.getElementById('btnSaveCloseMonth').textContent.replace('✅ ยืนยัน (','').replace(')','') || 'Manager'} | `+
+      `ผู้ดำเนินการ: ${currentUser?.name||currentRole} (${currentRole})`
+    );
+    actualCash=String(actual);
+    await loadCounts();
+    closeModal('closeMonthModal');
+    render();
+    autoBackup();
+    showToast(`ปิดยอดเดือน ${monthLabel()} เรียบร้อย ✅`,'success');
+  }catch(e){ showToast('ปิดยอดล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+// ══════════════════════════════════════════════
+// EXPORT — CSV (UTF-8 BOM, เปิดใน Excel ได้)
+// ══════════════════════════════════════════════
+function exportCSV(){
+  const rows=withRunning();
+  const BOM='\uFEFF';
+  let csv=BOM;
+  // Header
+  csv+='KMMH ใบสรุปเงินสดย่อย,'+monthLabel()+'\r\n\r\n';
+  csv+='วันที่,ประเภท,จำนวนเงิน (บาท),รหัสบัญชี,หมายเหตุ,ยอดคงเหลือ,สถานะ\r\n';
+  rows.forEach(tx=>{
+    const amt=tx.tx_type==='expense'?-Math.abs(parseFloat(tx.amount)):parseFloat(tx.amount);
+    csv+=`${fmtDate(tx.tx_date)},${tx.tx_type==='expense'?'รายจ่าย':'รับเงิน'},${amt},${csvEsc(tx.acc_code||'')},${csvEsc(tx.description||'')},${tx.runBal},${isTxLocked(tx)?'ล็อกแล้ว':'—'}\r\n`;
+  });
+  csv+='\r\n';
+  csv+=`ยอดตั้งต้น,${parseFloat(currentPeriod?.open_bal)||0}\r\n`;
+  csv+=`รับเงินเพิ่ม,${totalInc()}\r\n`;
+  csv+=`รายจ่ายรวม,${totalExp()}\r\n`;
+  csv+=`ยอดคงเหลือ,${closing()}\r\n`;
+  if(actualCash!=='') csv+=`นับเงินจริงได้,${actualCash}\r\nผลต่าง,${parseFloat(actualCash)-closing()}\r\n`;
+  csv+='\r\n';
+  // Summary by account
+  csv+='สรุปตามบัญชี\r\n';
+  csv+='รหัสบัญชี,ยอดรวม (บาท),%\r\n';
+  const map={};
+  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  const exp=totalExp();
+  Object.entries(map).sort((a,b)=>b[1]-a[1]).forEach(([acct,total])=>{
+    csv+=`${csvEsc(acct)},${total},${exp>0?(total/exp*100).toFixed(1):0}%\r\n`;
+  });
+  csv+=`รวม,${exp},100%\r\n\r\n`;
+  // Count history
+  csv+='ประวัติการนับเงิน\r\n';
+  csv+='เวลา,ยอดบัญชี,ยอดจริง,ผลต่าง,หมายเหตุ\r\n';
+  countRecords.forEach(c=>{
+    csv+=`${c.counted_at||''},${c.bal_book},${c.bal_real},${c.diff},${csvEsc(c.note||'')}\r\n`;
+  });
+  // Download
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`KMMH_เงินสดย่อย_${monthLabel()}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  addAudit('edit',`Export CSV เดือน ${monthLabel()}`);
+  showToast('Export CSV สำเร็จ ✅','success');
+}
+function csvEsc(s){ s=String(s||''); if(s.includes(',')||s.includes('"')||s.includes('\n')){ return '"'+s.replace(/"/g,'""')+'"'; } return s; }
+
+// ══════════════════════════════════════════════
+// EXPORT — Excel XML (4 Sheets)
+// ══════════════════════════════════════════════
+function exportXLSX(){
+  const runRows=withRunning();
+  const expTotal=totalExp(), cl=closing();
+  const actual=parseFloat(actualCash);
+  const map={};
+  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  const summaryRows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function cS(v){ return `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`; }
+  function cN(v){ const n=parseFloat(v); return isNaN(n)?cS('—'):`<Cell><Data ss:Type="Number">${n}</Data></Cell>`; }
+  function row(...cells){ return `<Row>${cells.join('')}</Row>\n`; }
+  function eRow(){ return `<Row ss:Height="6"/>\n`; }
+  // Sheet 1 — รายการ
+  let s1=`<Row ss:Height="18"><Cell ss:MergeAcross="6" ss:StyleID="sTitle"><Data ss:Type="String">ใบสรุปรายการเงินสดย่อย KMMH — ${esc(monthLabel())}</Data></Cell></Row>\n`;
+  s1+=eRow();
+  s1+=row(cS('วันที่'),cS('ประเภท'),cS('จำนวน (บาท)'),cS('รหัสบัญชี'),cS('หมายเหตุ'),cS('ยอดคงเหลือ'),cS('สถานะ'));
+  runRows.forEach(tx=>{
+    const amt=tx.tx_type==='expense'?-Math.abs(parseFloat(tx.amount)):parseFloat(tx.amount);
+    s1+=row(cS(fmtDate(tx.tx_date)),cS(tx.tx_type==='expense'?'รายจ่าย':'รับเงิน'),cN(amt),cS(tx.acc_code||''),cS(tx.description||''),cN(tx.runBal),cS(isTxLocked(tx)?'ล็อก':'—'));
+  });
+  s1+=eRow();
+  s1+=row(cS('ยอดตั้งต้น'),cS(''),cS(''),cN(parseFloat(currentPeriod?.open_bal)||0));
+  s1+=row(cS('รับเงินเพิ่ม'),cS(''),cS(''),cN(totalInc()));
+  s1+=row(cS('รายจ่ายรวม'),cS(''),cS(''),cN(-expTotal));
+  s1+=row(cS('ยอดคงเหลือ'),cS(''),cS(''),cN(cl));
+  if(actualCash!=='') s1+=row(cS('นับเงินจริงได้'),cS(''),cS(''),cN(actual));
+  if(actualCash!=='') s1+=row(cS('ผลต่าง (จริง-บัญชี)'),cS(''),cS(''),cN(actual-cl));
+  // Sheet 2 — สรุปตามบัญชี
+  let s2=`<Row ss:Height="18"><Cell ss:MergeAcross="2" ss:StyleID="sTitle"><Data ss:Type="String">สรุปค่าใช้จ่ายตามประเภทบัญชี — ${esc(monthLabel())}</Data></Cell></Row>\n`;
+  s2+=eRow();
+  s2+=row(cS('รหัสบัญชี / ประเภท'),cS('ยอดรวม (บาท)'),cS('% ของรายจ่าย'));
+  summaryRows.forEach(([acct,total])=>{ s2+=row(cS(acct),cN(total),cN(expTotal>0?+(total/expTotal*100).toFixed(1):0)); });
+  s2+=eRow();
+  s2+=row(cS('รวมรายจ่ายทั้งหมด'),cN(expTotal),cN(100));
+  // Sheet 3 — ประวัตินับเงิน
+  let s3=`<Row ss:Height="18"><Cell ss:MergeAcross="5" ss:StyleID="sTitle"><Data ss:Type="String">ประวัติการนับเงินสดย่อย — ${esc(monthLabel())}</Data></Cell></Row>\n`;
+  s3+=eRow();
+  s3+=row(cS('เวลา'),cS('ยอดบัญชี'),cS('นับจริงได้'),cS('ผลต่าง'),cS('หมายเหตุ'),cS('ผู้นับ'));
+  if(!countRecords.length) s3+=row(cS('ยังไม่มีประวัติ'));
+  countRecords.forEach(c=>{ s3+=row(cS(c.counted_at||''),cN(c.bal_book),cN(c.bal_real),cN(c.diff),cS(c.note||'—'),cS(c.by_name||c.by_role||'')); });
+  // Sheet 4 — Audit Trail
+  let s4=`<Row ss:Height="18"><Cell ss:MergeAcross="3" ss:StyleID="sTitle"><Data ss:Type="String">Audit Trail — ประวัติการแก้ไขทั้งหมด</Data></Cell></Row>\n`;
+  s4+=eRow();
+  s4+=row(cS('การกระทำ'),cS('รายละเอียด'),cS('โดย'),cS('เวลา'));
+  if(!auditLog.length) s4+=row(cS('ยังไม่มีประวัติ'));
+  auditLog.forEach(a=>{ s4+=row(cS(a.action),cS(a.description||''),cS(a.by_name||a.by_role||''),cS(a.logged_at||'')); });
+  const xml=`<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:x="urn:schemas-microsoft-com:office:excel">\n<Styles>\n  <Style ss:ID="sDefault"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Sarabun" ss:Size="10"/></Style>\n  <Style ss:ID="sTitle"><Font ss:FontName="Sarabun" ss:Size="12" ss:Bold="1"/><Interior ss:Color="#1a1a1a" ss:Pattern="Solid"/><Font ss:Color="#FFFFFF" ss:FontName="Sarabun" ss:Size="12" ss:Bold="1"/></Style>\n</Styles>\n<Worksheet ss:Name="รายการทั้งหมด"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="82"/><Column ss:Width="60"/><Column ss:Width="100"/><Column ss:Width="220"/><Column ss:Width="140"/><Column ss:Width="90"/><Column ss:Width="70"/>\n${s1}</Table></Worksheet>\n<Worksheet ss:Name="สรุปตามบัญชี"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="260"/><Column ss:Width="100"/><Column ss:Width="100"/>\n${s2}</Table></Worksheet>\n<Worksheet ss:Name="ประวัตินับเงิน"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="130"/><Column ss:Width="100"/><Column ss:Width="100"/><Column ss:Width="80"/><Column ss:Width="200"/><Column ss:Width="100"/>\n${s3}</Table></Worksheet>\n<Worksheet ss:Name="Audit Trail"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="60"/><Column ss:Width="340"/><Column ss:Width="100"/><Column ss:Width="130"/>\n${s4}</Table></Worksheet>\n</Workbook>`;
+  const blob=new Blob(['\uFEFF'+xml],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`KMMH_เงินสดย่อย_${monthLabel()}.xls`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  addAudit('edit',`Export Excel เดือน ${monthLabel()}`);
+  showToast('Export Excel สำเร็จ','success');
+}
+
+// ══════════════════════════════════════════════
+// EXPORT — PDF (print window)
+// ══════════════════════════════════════════════
+function exportPDF(){
+  const runRows=withRunning();
+  const expTotal=totalExp(), cl=closing();
+  const actual=parseFloat(actualCash);
+  const hasActual=!isNaN(actual)&&actualCash!=='';
+  const diff=hasActual?actual-cl:null;
+  const map={};
+  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  const summaryRows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const diffColor=diff===null?'#888':Math.abs(diff)<0.005?'#1e8449':diff<0?'#c0392b':'#b7770d';
+  const diffText=diff===null?'ยังไม่ได้นับ':Math.abs(diff)<0.005?'✅ ตรง':diff<0?`ขาด ${fmt2(Math.abs(diff))} บาท`:`เกิน ${fmt2(diff)} บาท`;
+  const tableRowsHTML=runRows.map(tx=>`<tr>
+    <td>${fmtDate(tx.tx_date)}</td>
+    <td style="text-align:center"><span class="${tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.tx_type==='expense'?'จ่าย':'รับ'}</span></td>
+    <td style="text-align:right;color:${tx.tx_type==='expense'?'#c0392b':'#1e8449'};font-family:monospace">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</td>
+    <td style="font-size:11px">${tx.acc_code||'—'}</td>
+    <td style="font-size:11px;color:#888">${tx.description||''}</td>
+    <td style="text-align:right;font-family:monospace;color:${tx.runBal<0?'#c0392b':'#1a1a1a'}">${fmt2(tx.runBal)}</td>
+  </tr>`).join('');
+  const win=window.open('','_blank','width=900,height=700');
+  win.document.write(`<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>KMMH ${monthLabel()}</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:20px}.badge-exp{background:#fde8e8;color:#c0392b;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}.badge-inc{background:#e8f5ee;color:#1e8449;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#f5f3ee;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;padding:6px 8px;text-align:left;border-bottom:1px solid #e0ddd8}td{padding:5px 8px;border-bottom:.5px solid #f0ede6}.total-row td{font-weight:700;background:#f5f3ee}.section-title{font-size:11px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px;border-bottom:1px solid #e0ddd8;padding-bottom:4px;margin-top:16px}.doc-header{display:flex;justify-content:space-between;border-bottom:2px solid #1a1a1a;padding-bottom:10px;margin-bottom:16px}.stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0}.stat-box{border:1px solid #e0ddd8;border-radius:6px;padding:8px 10px}.stat-lbl{font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}.stat-val{font-size:15px;font-weight:700;font-family:'IBM Plex Mono',monospace}.stat-val.red{color:#c0392b}.stat-val.green{color:#1e8449}.stat-val.amber{color:#b7770d}.footer-note{font-size:10px;color:#bbb;text-align:center;margin-top:16px;border-top:1px solid #f0ede6;padding-top:8px}@media print{body{padding:10px}@page{size:A4;margin:15mm 12mm}}</style></head><body>
+<div class="doc-header">
+  <div><div style="font-size:11px;font-weight:700;color:#888;letter-spacing:.06em">KMMH — กิจมั่งมีโฮม</div><div style="font-size:18px;font-weight:700">ใบสรุปเงินสดย่อย</div><div style="font-size:11px;color:#888;font-family:'IBM Plex Mono',monospace">ประจำเดือน ${monthLabel()} · พิมพ์วันที่ ${nowStr()}</div></div>
+  <div style="text-align:right;font-size:11px;color:#888;line-height:1.9"><div>ยอดยกมา: <strong>${fmt2(parseFloat(currentPeriod?.open_bal)||0)}</strong> บาท</div><div>ยอดคงเหลือ: <strong>${fmt2(cl)}</strong> บาท</div><div>รายการทั้งหมด: <strong>${transactions.length}</strong> รายการ</div></div>
+</div>
+<div class="stat-grid">
+  <div class="stat-box"><div class="stat-lbl">ยอดตั้งต้น</div><div class="stat-val">${fmt2(parseFloat(currentPeriod?.open_bal)||0)}</div></div>
+  <div class="stat-box"><div class="stat-lbl">รับเงินเพิ่ม</div><div class="stat-val green">+${fmt2(totalInc())}</div></div>
+  <div class="stat-box"><div class="stat-lbl">รายจ่ายรวม</div><div class="stat-val red">-${fmt2(expTotal)}</div></div>
+  <div class="stat-box"><div class="stat-lbl">ยอดตามบัญชี</div><div class="stat-val ${cl<0?'red':cl<500?'amber':''}">${fmt2(cl)}</div></div>
+  <div class="stat-box"><div class="stat-lbl">นับจริงได้</div><div class="stat-val" style="color:${diffColor}">${hasActual?fmt2(actual):'—'}</div></div>
+</div>
+<div style="border:1.5px solid ${diff===null?'#ccc':Math.abs(diff)<0.005?'#a9dfbf':diff<0?'#f5b7b1':'#f0c040'};background:${diff===null?'#f9f9f9':Math.abs(diff)<0.005?'#e8f5ee':diff<0?'#fde8e8':'#fef9e7'};border-radius:6px;padding:10px 14px;margin-bottom:14px;display:flex;gap:20px;align-items:center">
+  <div><div style="font-size:10px;color:#888">ยอดบัญชี</div><div style="font-family:monospace;font-weight:700">${fmt2(cl)} บาท</div></div>
+  <div style="color:#ccc">→</div>
+  <div><div style="font-size:10px;color:#888">นับเงินจริง</div><div style="font-family:monospace;font-weight:700">${hasActual?fmt2(actual)+' บาท':'—'}</div></div>
+  <div style="color:#ccc">=</div>
+  <div><div style="font-size:10px;color:#888">ผลต่าง</div><div style="font-family:monospace;font-weight:700;color:${diffColor}">${diffText}</div></div>
+</div>
+<div class="section-title">รายการทั้งหมด (${runRows.length} รายการ)</div>
+<table><thead><tr><th style="width:82px">วันที่</th><th style="width:50px">ประเภท</th><th style="width:110px;text-align:right">จำนวน</th><th>ประเภทบัญชี</th><th>หมายเหตุ</th><th style="width:110px;text-align:right">คงเหลือ</th></tr></thead>
+<tbody>${tableRowsHTML}</tbody>
+<tfoot><tr class="total-row"><td colspan="2">รวม</td><td style="text-align:right;color:#c0392b;font-family:monospace">-${fmt2(expTotal)}</td><td colspan="3" style="text-align:right;font-family:monospace">${fmt2(cl)} บาท</td></tr></tfoot>
+</table>
+<div class="section-title" style="page-break-before:always">สรุปค่าใช้จ่ายตามประเภทบัญชี</div>
+<table><thead><tr><th>ประเภทบัญชี</th><th style="text-align:right;width:120px">ยอดรวม</th><th style="text-align:right;width:70px">%</th></tr></thead>
+<tbody>${summaryRows.map(([acct,total])=>`<tr><td style="font-size:11px">${acct}</td><td style="text-align:right;font-family:monospace;color:#c0392b">${fmt2(total)}</td><td style="text-align:right;font-size:11px;color:#888">${expTotal>0?(total/expTotal*100).toFixed(1):0}%</td></tr>`).join('')}</tbody>
+<tfoot><tr class="total-row"><td>รวม</td><td style="text-align:right;font-family:monospace;color:#c0392b">${fmt2(expTotal)}</td><td style="text-align:right">100%</td></tr></tfoot></table>
+<div class="footer-note">เอกสารนี้สร้างโดย KMMH Petty Cash System v4 · ${nowStr()}</div>
+<button onclick="window.print()" style="margin-top:12px;padding:6px 16px;cursor:pointer;border-radius:6px;border:1.5px solid #ccc;font-family:'Sarabun',sans-serif;font-size:13px">🖨️ พิมพ์</button>
+</body></html>`);
+  win.document.close();
+  setTimeout(()=>{ win.focus(); },400);
+  addAudit('edit',`Export PDF เดือน ${monthLabel()}`);
+  showToast('เปิดหน้า PDF แล้ว','success');
+}
+
+// ══════════════════════════════════════════════
+// EXPORT — Audit .txt
+// ══════════════════════════════════════════════
+function exportAuditTXT(){
+  if(!auditLog.length){ showToast('ยังไม่มีประวัติ','error'); return; }
+  const lines=[`KMMH — Audit Trail`,`เดือน: ${monthLabel()}`,`ส่งออกเมื่อ: ${nowStr()}`,`${'─'.repeat(60)}`,''];
+  auditLog.forEach((a,i)=>{
+    const label=a.action==='add'?'[เพิ่ม]':a.action==='edit'?'[แก้ไข]':a.action==='del'?'[ลบ]  ':a.action==='login'?'[เข้าสู่]':'[ล็อก]';
+    lines.push(`${String(i+1).padStart(4,'0')}  ${label}  ${a.logged_at||''}`);
+    lines.push(`      ${a.description||a.action}`);
+    lines.push('');
+  });
+  lines.push(`${'─'.repeat(60)}`);
+  lines.push(`รวม ${auditLog.length} รายการ`);
+  const blob=new Blob([lines.join('\n')],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`KMMH_AuditTrail_${month}.txt`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  showToast('Export Audit Trail สำเร็จ','success');
+}
+
+// ══════════════════════════════════════════════
+// BACKUP JSON
+// ══════════════════════════════════════════════
+function autoBackup(){
+  const data={period:currentPeriod,transactions,countRecords,auditLog,exported_at:nowStr(),month,monthLabel:monthLabel()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`KMMH_backup_${month}.json`; a.click(); URL.revokeObjectURL(a.href);
+  showToast('Backup JSON สำเร็จ','success');
+}
+
+// ══════════════════════════════════════════════
+// SQL SCHEMA
+// ══════════════════════════════════════════════
+const SQL_SCHEMA=`-- KMMH Petty Cash v4 — Supabase Schema
+-- รันใน Supabase > SQL Editor
+
+-- ① ตาราง Users (PIN auth)
+CREATE TABLE IF NOT EXISTS petty_cash_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  pin_value VARCHAR(4) NOT NULL UNIQUE,
+  role TEXT NOT NULL CHECK (role IN ('cashier','manager')),
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ② ตาราง Periods (งวด/เดือน)
+CREATE TABLE IF NOT EXISTS petty_cash_periods (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  period_no INTEGER NOT NULL,
+  month_key VARCHAR(7) NOT NULL UNIQUE, -- 'YYYY-MM'
+  open_bal NUMERIC(15,2) DEFAULT 0,
+  is_locked BOOLEAN DEFAULT false,
+  locked_at TIMESTAMPTZ,
+  final_bal NUMERIC(15,2),
+  created_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ③ ตาราง Transactions
+CREATE TABLE IF NOT EXISTS petty_cash_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  period_id UUID REFERENCES petty_cash_periods(id) ON DELETE CASCADE,
+  tx_date DATE NOT NULL,
+  tx_type TEXT NOT NULL CHECK (tx_type IN ('income','expense')),
+  acc_code TEXT,
+  description TEXT,
+  amount NUMERIC(15,2) NOT NULL,
+  image_urls  TEXT,    -- JSON array ของ Supabase Storage Public URL (ไม่ใช่ base64)
+  by_role TEXT,
+  by_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ④ ตาราง Counts (ประวัตินับเงิน)
+CREATE TABLE IF NOT EXISTS petty_cash_counts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  period_id UUID REFERENCES petty_cash_periods(id) ON DELETE CASCADE,
+  counted_at TIMESTAMPTZ DEFAULT now(),
+  bal_book NUMERIC(15,2),
+  bal_real NUMERIC(15,2),
+  diff NUMERIC(15,2),
+  note TEXT,
+  by_role TEXT,
+  by_name TEXT
+);
+
+-- ⑤ ตาราง Audit Trail
+CREATE TABLE IF NOT EXISTS petty_cash_audit (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  period_id UUID REFERENCES petty_cash_periods(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  description TEXT,
+  by_role TEXT,
+  by_name TEXT,
+  logged_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ⑥ เพิ่ม Users เริ่มต้น (เปลี่ยน PIN ได้ใน Supabase Table Editor โดยตรง)
+-- ⚠️  ห้ามเก็บ PIN ไว้ในโค้ด HTML — ต้องแก้ใน Supabase เท่านั้น
+INSERT INTO petty_cash_users (name, pin_value, role)
+VALUES 
+  ('พนักงานแคชเชียร์', '1234', 'cashier'),
+  ('ผู้จัดการ', '9999', 'manager')
+ON CONFLICT (pin_value) DO NOTHING;
+
+-- ⑦ สร้าง Storage Bucket 'receipts' สำหรับรูปใบเสร็จ
+-- (ทำใน Supabase Dashboard > Storage > New Bucket)
+-- ชื่อ bucket: receipts
+-- Public bucket: ✅ เปิด (เพื่อให้ getPublicUrl ทำงานได้)
+-- หรือรัน SQL นี้:
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('receipts', 'receipts', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Policy สำหรับ Storage bucket
+CREATE POLICY "Allow anon upload receipts"
+  ON storage.objects FOR INSERT TO anon
+  WITH CHECK (bucket_id = 'receipts');
+
+CREATE POLICY "Allow anon read receipts"
+  ON storage.objects FOR SELECT TO anon
+  USING (bucket_id = 'receipts');
+
+CREATE POLICY "Allow anon delete receipts"
+  ON storage.objects FOR DELETE TO anon
+  USING (bucket_id = 'receipts');
+
+-- ⑦ RLS (ถ้าต้องการ)
+ALTER TABLE petty_cash_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE petty_cash_periods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE petty_cash_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE petty_cash_counts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE petty_cash_audit ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all anon" ON petty_cash_users FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all anon" ON petty_cash_periods FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all anon" ON petty_cash_transactions FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all anon" ON petty_cash_counts FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all anon" ON petty_cash_audit FOR ALL TO anon USING (true) WITH CHECK (true);`;
+
+function showSchema(){
+  document.getElementById('schemaBox').textContent=SQL_SCHEMA;
+}
+function copySchema(){
+  navigator.clipboard.writeText(SQL_SCHEMA).then(()=>showToast('Copy SQL Schema แล้ว','success')).catch(()=>{
+    const el=document.getElementById('schemaBox');
+    el.textContent=SQL_SCHEMA;
+    el.select?.();
+    showToast('กรุณา copy text ในกล่องด้านบน','success');
+  });
+}
+
+// ══════════════════════════════════════════════
+// MODAL / UTILITY HELPERS
+// ══════════════════════════════════════════════
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function closeForm(){ closeModal('formModal'); }
+
+document.addEventListener('click',e=>{
+  ['formModal','closeMonthModal'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
+  });
+  if(document.getElementById('lightbox').classList.contains('open')&&e.target===document.getElementById('lightbox')) closeLightbox();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    ['formModal','closeMonthModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+  }
+});
+
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='show '+(type||'');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.className='',3500);
+}
+
+let loadingEl=null;
+function showLoading(show,msg='กำลังบันทึก...'){
+  if(show){
+    if(!loadingEl){
+      loadingEl=document.createElement('div'); loadingEl.className='loading-overlay';
+      loadingEl.innerHTML=`<div class="loading-spinner"></div><div class="loading-txt">${msg}</div>`;
+      document.body.appendChild(loadingEl);
+    } else { loadingEl.querySelector('.loading-txt').textContent=msg; }
+  } else if(loadingEl){ loadingEl.remove(); loadingEl=null; }
+}
+
+// Drag-drop on image upload zone
+document.addEventListener('DOMContentLoaded',()=>{
+  const dz=document.getElementById('dropZone');
+  if(dz){
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--blue)';});
+    dz.addEventListener('dragleave',()=>{dz.style.borderColor='';});
+    dz.addEventListener('drop',e=>{e.preventDefault();dz.style.borderColor='';handleFiles(e.dataTransfer.files);});
+  }
+});
+</script>
+</body>
+</html>
