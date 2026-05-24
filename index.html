@@ -51,6 +51,28 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--dark);fon
 .role-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;flex-shrink:0}
 .role-cashier{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border)}
 .role-manager{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.role-auditor{background:#f3e8ff;color:#6b21a8;border:1px solid #d8b4fe}
+/* ── Withdraw Request ── */
+.wr-card{background:var(--white);border:2px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;margin-bottom:.75rem}
+.wr-card.pending{border-color:var(--amber-border);background:var(--amber-bg)}
+.wr-card.approved{border-color:var(--green-border);background:var(--green-bg)}
+.wr-card.rejected{border-color:var(--red-border);background:var(--red-bg)}
+.wr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;margin-bottom:.5rem;flex-wrap:wrap}
+.wr-amt{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;color:var(--dark)}
+.wr-status{font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px}
+.wr-status.pending{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+.wr-status.audited{background:#f3e8ff;color:#6b21a8;border:1px solid #d8b4fe}
+.wr-status.approved{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.wr-status.rejected{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.wr-meta{font-size:12px;color:var(--muted);line-height:1.7}
+.wr-actions{display:flex;gap:8px;margin-top:.75rem;flex-wrap:wrap}
+.btn-approve{background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif}
+.btn-approve:hover{background:#166638}
+.btn-reject{background:var(--red);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Sarabun',sans-serif}
+.btn-reject:hover{background:#992b23}
+.pin-inline-wrap{margin-top:.6rem;display:flex;flex-direction:column;gap:4px}
+.pin-inline-inp{background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'IBM Plex Mono',monospace;font-size:16px;width:110px;letter-spacing:.2em;outline:none;text-align:center}
+.pin-inline-inp:focus{border-color:#999}
 .logout-btn{background:none;border:1px solid rgba(255,255,255,.2);border-radius:6px;color:rgba(255,255,255,.6);font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;padding:4px 9px}
 .logout-btn:hover{border-color:rgba(255,255,255,.5);color:#fff}
 .db-badge{background:#14532d;color:#86efac;font-size:10px;padding:2px 8px;border-radius:10px;font-family:'IBM Plex Mono',monospace}
@@ -335,6 +357,7 @@ tbody tr:hover td{background:#fafaf7}
   <button class="tab"    onclick="switchTab('count')">💰 นับเงินจริง</button>
   <button class="tab"    onclick="switchTab('summary')">📊 สรุปเดือน</button>
   <button class="tab"    onclick="switchTab('reconcile')">✅ ตรวจนับ</button>
+  <button class="tab"    onclick="switchTab('withdraw')">🏦 เบิกเงิน</button>
   <button class="tab"    onclick="switchTab('audit')">🔒 ประวัติ</button>
   <button class="tab"    onclick="switchTab('export')">📤 Export</button>
 </div>
@@ -457,6 +480,49 @@ tbody tr:hover td{background:#fafaf7}
   <div style="padding:.75rem 14px;font-size:11px;color:var(--muted2)">⚠️ รายการหลังปิดยอดจะถูกล็อก ไม่สามารถแก้ไขหรือลบได้</div>
 </div>
 
+<!-- ─── VIEW: WITHDRAW REQUESTS ─── -->
+<div id="view-withdraw" style="display:none">
+  <!-- ส่วน: ยื่นคำขอเบิก (พนักงาน/ผู้จัดการ) -->
+  <div class="sum-box" id="wrRequestBox">
+    <div class="sum-head">🏦 ยื่นคำขอเบิกเงินก้อนใหม่</div>
+    <div style="padding:1rem;display:flex;flex-direction:column;gap:.75rem">
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.7">
+        พนักงานนับเงินสดที่มีอยู่จริง แล้วยื่นคำขอเบิกเงินเพิ่ม<br>
+        ระบบจะส่งให้ <strong>ผู้ตรวจสอบ</strong> และ <strong>ผู้จัดการ</strong> อนุมัติก่อนบันทึกเงินเข้า
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">ยอดตามบัญชี</label>
+          <div id="wrBookDisplay" style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;margin-top:2px">—</div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">นับเงินจริงได้ (บาท) *</label>
+          <input type="number" id="wrCountedActual" placeholder="กรอกยอดที่นับ" oninput="previewWrCount()"
+            style="font-family:'IBM Plex Mono',monospace;font-size:15px;width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;outline:none">
+        </div>
+      </div>
+      <div id="wrCountPreview"></div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">จำนวนเงินที่ขอเบิก (บาท) *</label>
+        <input type="number" id="wrAmount" placeholder="0" min="1"
+          style="font-family:'IBM Plex Mono',monospace;font-size:15px;width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;outline:none">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">หมายเหตุ / เหตุผล</label>
+        <textarea id="wrReason" placeholder="เหตุผลการขอเบิก..." rows="2"
+          style="width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-family:'Sarabun',sans-serif;font-size:13px;outline:none;resize:vertical"></textarea>
+      </div>
+      <button class="btn btn-dark" onclick="submitWithdrawRequest()" id="btnSubmitWr">📤 ยื่นคำขอเบิก</button>
+    </div>
+  </div>
+
+  <!-- ส่วน: รายการคำขอที่รอดำเนินการ -->
+  <div class="sum-box">
+    <div class="sum-head">📋 คำขอเบิกเงิน — รายการทั้งหมด</div>
+    <div id="wrList" style="padding:.5rem 0"></div>
+  </div>
+</div>
+
 <!-- ─── VIEW: EXPORT ─── -->
 <div id="view-export" style="display:none">
   <div class="export-section">
@@ -486,7 +552,7 @@ tbody tr:hover td{background:#fafaf7}
     <div class="manager-zone" id="managerZone" style="display:none">
       <h4>⚙️ จัดการงวด (Manager เท่านั้น)</h4>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอด + เริ่มเดือนใหม่</button>
+        <button class="btn btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอดรายเดือน</button>
         <button class="btn btn-outline" onclick="autoBackup()">💾 Backup JSON</button>
       </div>
       <div style="margin-top:8px;font-size:11px;color:var(--muted)">การปิดยอดจะล็อกรายการเดือนนี้ และสร้างงวดใหม่เดือนถัดไปโดยอัตโนมัติ</div>
@@ -578,6 +644,53 @@ tbody tr:hover td{background:#fafaf7}
   <div class="modal-btns">
     <button class="btn-cancel-sm" onclick="closeModal('preCountModal')">ยกเลิก</button>
     <button class="btn btn-dark btn-save" id="btnConfirmPreCount" onclick="confirmPreCount()" disabled style="opacity:.4;cursor:not-allowed">✅ ยืนยันและดำเนินการเบิก</button>
+  </div>
+</div>
+</div>
+
+<!-- ─── WITHDRAW APPROVE MODAL (Auditor) ─── -->
+<div class="modal-bg" id="wrAuditModal">
+<div class="modal">
+  <h2>🔍 ตรวจสอบคำขอเบิกเงิน</h2>
+  <div id="wrAuditInfo" style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8"></div>
+  <div class="field">
+    <label>หมายเหตุผู้ตรวจสอบ (ถ้ามี)</label>
+    <textarea id="wrAuditNote" placeholder="ข้อสังเกต หรือเหตุผลปฏิเสธ..."></textarea>
+  </div>
+  <div class="mgr-pin-wrap">
+    <label>🔑 PIN ผู้ตรวจสอบ (Auditor PIN) — จำเป็น</label>
+    <input type="password" id="wrAuditPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkWrAuditPin()" autocomplete="off">
+    <div class="mgr-pin-status" id="wrAuditPinStatus"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('wrAuditModal')">ยกเลิก</button>
+    <button class="btn btn-reject" onclick="auditWithdraw('reject')" id="btnWrAuditReject" disabled style="opacity:.4">❌ ปฏิเสธ</button>
+    <button class="btn btn-approve" onclick="auditWithdraw('approve')" id="btnWrAuditApprove" disabled style="opacity:.4">✅ ผ่านการตรวจสอบ</button>
+  </div>
+</div>
+</div>
+
+<!-- ─── WITHDRAW FINAL APPROVE MODAL (Manager) ─── -->
+<div class="modal-bg" id="wrMgrModal">
+<div class="modal">
+  <h2>✅ อนุมัติเบิกเงินก้อนใหม่</h2>
+  <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#7a5500;margin-bottom:1rem;line-height:1.7">
+    ⚠️ เงินจำนวนนี้จะถูก<strong>บันทึกเป็นรายการรับเงินเข้า</strong>ทันทีหลังอนุมัติ
+  </div>
+  <div id="wrMgrInfo" style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8"></div>
+  <div class="field">
+    <label>หมายเหตุผู้จัดการ (ถ้ามี)</label>
+    <textarea id="wrMgrNote" placeholder="หมายเหตุเพิ่มเติม..."></textarea>
+  </div>
+  <div class="mgr-pin-wrap">
+    <label>🔑 PIN ผู้จัดการ (Manager PIN) — จำเป็น</label>
+    <input type="password" id="wrMgrPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkWrMgrPin()" autocomplete="off">
+    <div class="mgr-pin-status" id="wrMgrPinStatus"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('wrMgrModal')">ยกเลิก</button>
+    <button class="btn btn-reject" onclick="mgrWithdraw('reject')" id="btnWrMgrReject" disabled style="opacity:.4">❌ ปฏิเสธ</button>
+    <button class="btn btn-approve" onclick="mgrWithdraw('approve')" id="btnWrMgrApprove" disabled style="opacity:.4">✅ อนุมัติและเบิกเงิน</button>
   </div>
 </div>
 </div>
@@ -766,6 +879,9 @@ async function enterApp(){
   if(currentRole==='manager'){
     badge.textContent='👑 '+(currentUser.name||'Manager');
     badge.className='role-badge role-manager';
+  } else if(currentRole==='auditor'){
+    badge.textContent='🔍 '+(currentUser.name||'Auditor');
+    badge.className='role-badge role-auditor';
   } else {
     badge.textContent='👤 '+(currentUser.name||'Cashier');
     badge.className='role-badge role-cashier';
@@ -794,7 +910,7 @@ async function enterApp(){
   await loadPeriodForMonth();
   // บันทึก audit หลัง period โหลดแล้ว พร้อมชื่อ+สิทธิ์พนักงาน
   await addAudit('login',
-    `เข้าสู่ระบบ | สิทธิ์: ${currentRole==='manager'?'ผู้จัดการ (Manager)':'พนักงาน (Cashier)'} | ชื่อ: ${currentUser.name||'(ไม่ระบุ)'}`
+    `เข้าสู่ระบบ | สิทธิ์: ${currentRole==='manager'?'ผู้จัดการ (Manager)':currentRole==='auditor'?'ผู้ตรวจสอบ (Auditor)':'พนักงาน (Cashier)'} | ชื่อ: ${currentUser.name||'(ไม่ระบุ)'}`
   );
   showLoading(false);
   render();
@@ -852,6 +968,7 @@ async function loadPeriodForMonth(){
     await loadTransactions();
     await loadCounts();
     await loadAudit();
+    await loadWithdrawRequests();
     // Sync actualCash from latest count
     if(countRecords.length>0){
       actualCash=String(countRecords[0].bal_real);
@@ -1090,7 +1207,7 @@ function renderDiff(){
 function renderTable(){
   const q=(document.getElementById('searchBox')?.value||'').toLowerCase();
   const ft=document.getElementById('filterType')?.value||'';
-  let rows=withRunning();
+  let rows=withRunning().reverse();
   if(q) rows=rows.filter(e=>(e.acc_code||'').toLowerCase().includes(q)||(e.description||'').toLowerCase().includes(q)||e.tx_date.includes(q));
   if(ft) rows=rows.filter(e=>e.tx_type===ft);
   const isManager=currentRole==='manager';
@@ -1204,16 +1321,17 @@ function renderCountHistory(){
 // TAB
 // ══════════════════════════════════════════════
 function switchTab(v){
-  ['entries','count','summary','reconcile','audit','export'].forEach(t=>{
+  ['entries','count','summary','reconcile','withdraw','audit','export'].forEach(t=>{
     document.getElementById('view-'+t).style.display=t===v?'block':'none';
   });
   document.querySelectorAll('.tab').forEach((el,i)=>{
-    el.classList.toggle('on',['entries','count','summary','reconcile','audit','export'][i]===v);
+    el.classList.toggle('on',['entries','count','summary','reconcile','withdraw','audit','export'][i]===v);
   });
   if(v==='summary') renderSummary();
   if(v==='reconcile') renderReconcile();
   if(v==='audit') renderAudit();
   if(v==='count') renderCountHistory();
+  if(v==='withdraw') renderWithdrawTab();
 }
 
 // ══════════════════════════════════════════════
@@ -2028,11 +2146,33 @@ CREATE TABLE IF NOT EXISTS petty_cash_audit (
   logged_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ⑥ เพิ่ม Users เริ่มต้น (เปลี่ยน PIN ได้ใน Supabase Table Editor โดยตรง)
+-- ⑥ ตาราง Withdraw Requests (คำขอเบิกเงิน)
+CREATE TABLE IF NOT EXISTS petty_cash_withdrawals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  period_id UUID REFERENCES petty_cash_periods(id) ON DELETE CASCADE,
+  requested_amount NUMERIC(15,2) NOT NULL,
+  counted_actual NUMERIC(15,2),
+  bal_book NUMERIC(15,2),
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','audited','approved','rejected')),
+  requested_by_name TEXT,
+  requested_by_role TEXT,
+  audit_note TEXT,
+  audited_by_name TEXT,
+  audited_at TIMESTAMPTZ,
+  mgr_note TEXT,
+  approved_by_name TEXT,
+  approved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ⑦ เพิ่ม Users เริ่มต้น (เปลี่ยน PIN ได้ใน Supabase Table Editor โดยตรง)
 -- ⚠️  ห้ามเก็บ PIN ไว้ในโค้ด HTML — ต้องแก้ใน Supabase เท่านั้น
 INSERT INTO petty_cash_users (name, pin_value, role)
 VALUES 
   ('พนักงานแคชเชียร์', '1234', 'cashier'),
+  ('ผู้ตรวจสอบ', '5678', 'auditor'),
   ('ผู้จัดการ', '9999', 'manager')
 ON CONFLICT (pin_value) DO NOTHING;
 
@@ -2084,6 +2224,304 @@ function copySchema(){
 }
 
 // ══════════════════════════════════════════════
+// WITHDRAW REQUESTS — ระบบเบิกเงินก้อนใหม่
+// ══════════════════════════════════════════════
+let withdrawRequests = [];    // rows from petty_cash_withdrawals
+let _activeWrId = null;       // id ของ request ที่กำลัง process
+
+async function loadWithdrawRequests(){
+  if(!currentPeriod) return;
+  const {data}=await sb.from('petty_cash_withdrawals')
+    .select('*').eq('period_id',currentPeriod.id)
+    .order('created_at',{ascending:false});
+  withdrawRequests=data||[];
+}
+
+function renderWithdrawTab(){
+  // อัปเดต book display
+  document.getElementById('wrBookDisplay').textContent=fmt2(closing())+' บาท';
+  // แสดง/ซ่อน box ยื่นคำขอ (cashier และ manager ยื่นได้ auditor ทำไม่ได้)
+  document.getElementById('wrRequestBox').style.display=currentRole==='auditor'?'none':'block';
+  renderWithdrawList();
+}
+
+function previewWrCount(){
+  const book=closing();
+  const actual=parseFloat(document.getElementById('wrCountedActual').value);
+  const prev=document.getElementById('wrCountPreview');
+  if(isNaN(actual)||document.getElementById('wrCountedActual').value===''){prev.innerHTML='';return;}
+  const diff=actual-book;
+  const ok=Math.abs(diff)<0.005;
+  prev.innerHTML=`<div class="alert ${ok?'alert-ok':'alert-warn'}" style="margin:.25rem 0;font-size:12px">
+    ยอดบัญชี ${fmt2(book)} บาท → นับจริง ${fmt2(actual)} บาท
+    ${ok?'✅ ตรง':`⚠️ ต่าง ${fmt2(Math.abs(diff))} บาท (${diff>0?'เกิน':'ขาด'})`}
+  </div>`;
+}
+
+async function submitWithdrawRequest(){
+  const countedActual=parseFloat(document.getElementById('wrCountedActual').value);
+  const amount=parseFloat(document.getElementById('wrAmount').value);
+  const reason=document.getElementById('wrReason').value.trim();
+  const book=closing();
+  if(isNaN(countedActual)||document.getElementById('wrCountedActual').value===''){
+    showToast('กรุณานับเงินและกรอกยอดที่นับจริงก่อน','error'); return;
+  }
+  if(!amount||amount<=0){ showToast('กรุณากรอกจำนวนเงินที่ขอเบิก','error'); return; }
+  if(!confirm(`ยืนยันยื่นคำขอเบิกเงิน ${fmt2(amount)} บาท?\n(ระบบจะส่งให้ผู้ตรวจสอบและผู้จัดการอนุมัติ)`)) return;
+  showLoading(true,'กำลังยื่นคำขอ...');
+  try{
+    // บันทึก count ที่นับก่อนเบิกก่อน
+    await sb.from('petty_cash_counts').insert({
+      period_id:currentPeriod.id,
+      bal_book:book,
+      bal_real:countedActual,
+      diff:countedActual-book,
+      note:'นับเงินก่อนยื่นคำขอเบิก',
+      by_role:currentRole,
+      by_name:currentUser?.name||currentRole
+    });
+    actualCash=String(countedActual);
+    document.getElementById('actualInput').value=countedActual;
+    // สร้าง withdrawal request
+    const {error}=await sb.from('petty_cash_withdrawals').insert({
+      period_id:currentPeriod.id,
+      requested_amount:amount,
+      counted_actual:countedActual,
+      bal_book:book,
+      reason:reason||null,
+      status:'pending',
+      requested_by_name:currentUser?.name||currentRole,
+      requested_by_role:currentRole
+    });
+    if(error) throw new Error(error.message);
+    await addAudit('edit',
+      `ยื่นคำขอเบิกเงิน | จำนวน: ${fmt2(amount)} บาท | นับจริง: ${fmt2(countedActual)} บาท | ยอดบัญชี: ${fmt2(book)} บาท | เหตุผล: ${reason||'(ไม่ระบุ)'}`
+    );
+    await loadWithdrawRequests();
+    await loadCounts();
+    renderCountHistory(); renderReconcile(); renderCards(); renderDiff();
+    // reset form
+    document.getElementById('wrCountedActual').value='';
+    document.getElementById('wrAmount').value='';
+    document.getElementById('wrReason').value='';
+    document.getElementById('wrCountPreview').innerHTML='';
+    renderWithdrawList();
+    showToast('ยื่นคำขอเบิกเงินแล้ว รอผู้ตรวจสอบและผู้จัดการอนุมัติ ✅','success');
+  }catch(e){ showToast('ยื่นคำขอล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+function renderWithdrawList(){
+  const el=document.getElementById('wrList');
+  if(!withdrawRequests.length){
+    el.innerHTML='<div class="empty" style="padding:1.5rem 1rem;text-align:center;color:var(--muted);font-size:13px">ยังไม่มีคำขอเบิกเงินในเดือนนี้</div>';
+    return;
+  }
+  const statusLabel={pending:'⏳ รอตรวจสอบ',audited:'🔍 ผ่านตรวจสอบแล้ว',approved:'✅ อนุมัติแล้ว',rejected:'❌ ปฏิเสธ'};
+  let h='';
+  withdrawRequests.forEach(wr=>{
+    const canAudit=currentRole==='auditor'&&wr.status==='pending';
+    const canApprove=currentRole==='manager'&&wr.status==='audited';
+    h+=`<div class="wr-card ${wr.status==='approved'?'approved':wr.status==='rejected'?'rejected':wr.status==='audited'?'':'pending'}">
+      <div class="wr-head">
+        <div>
+          <div class="wr-amt">฿ ${fmt2(wr.requested_amount)}</div>
+          <div class="wr-meta">
+            โดย: ${wr.requested_by_name||wr.requested_by_role} · ${fmtDatetime(wr.created_at)}<br>
+            ยอดบัญชี: ${fmt2(wr.bal_book)} บาท · นับจริง: ${fmt2(wr.counted_actual)} บาท<br>
+            ${wr.reason?`เหตุผล: ${wr.reason}`:''}
+          </div>
+        </div>
+        <span class="wr-status ${wr.status}">${statusLabel[wr.status]||wr.status}</span>
+      </div>
+      ${wr.audited_by_name?`<div class="wr-meta" style="margin-top:.25rem">🔍 ตรวจสอบโดย: ${wr.audited_by_name} · ${fmtDatetime(wr.audited_at)}${wr.audit_note?` · "${wr.audit_note}"`:''})</div>`:''}
+      ${wr.approved_by_name?`<div class="wr-meta" style="margin-top:.25rem">✅ อนุมัติโดย: ${wr.approved_by_name} · ${fmtDatetime(wr.approved_at)}${wr.mgr_note?` · "${wr.mgr_note}"`:''})</div>`:''}
+      ${canAudit?`<div class="wr-actions">
+        <button class="btn-reject" onclick="openWrAuditModal('${wr.id}','reject')">❌ ปฏิเสธ</button>
+        <button class="btn-approve" onclick="openWrAuditModal('${wr.id}','approve')">🔍 ตรวจสอบและอนุมัติ</button>
+      </div>`:''}
+      ${canApprove?`<div class="wr-actions">
+        <button class="btn-reject" onclick="openWrMgrModal('${wr.id}','reject')">❌ ปฏิเสธ</button>
+        <button class="btn-approve" onclick="openWrMgrModal('${wr.id}','approve')">✅ อนุมัติและเบิกเงิน</button>
+      </div>`:''}
+    </div>`;
+  });
+  el.innerHTML=h;
+}
+
+// ── Auditor Modal ──
+function openWrAuditModal(wrId){
+  _activeWrId=wrId;
+  const wr=withdrawRequests.find(w=>w.id===wrId);
+  if(!wr) return;
+  document.getElementById('wrAuditInfo').innerHTML=
+    `<strong>คำขอเบิก ฿${fmt2(wr.requested_amount)}</strong><br>
+    โดย: ${wr.requested_by_name||''} · ยอดบัญชี: ${fmt2(wr.bal_book)} บาท · นับจริง: ${fmt2(wr.counted_actual)} บาท<br>
+    ${wr.reason?`เหตุผล: ${wr.reason}`:''}`;
+  document.getElementById('wrAuditNote').value='';
+  document.getElementById('wrAuditPin').value='';
+  document.getElementById('wrAuditPinStatus').textContent='';
+  const btnA=document.getElementById('btnWrAuditApprove');
+  const btnR=document.getElementById('btnWrAuditReject');
+  btnA.disabled=true; btnA.style.opacity='.4';
+  btnR.disabled=true; btnR.style.opacity='.4';
+  openModal('wrAuditModal');
+  setTimeout(()=>document.getElementById('wrAuditPin').focus(),200);
+}
+
+async function checkWrAuditPin(){
+  const val=document.getElementById('wrAuditPin').value;
+  const status=document.getElementById('wrAuditPinStatus');
+  const btnA=document.getElementById('btnWrAuditApprove');
+  const btnR=document.getElementById('btnWrAuditReject');
+  if(val.length<4){
+    btnA.disabled=true; btnA.style.opacity='.4';
+    btnR.disabled=true; btnR.style.opacity='.4';
+    status.textContent=''; return;
+  }
+  try{
+    const {data}=await sb.from('petty_cash_users')
+      .select('id,name,role').eq('pin_value',val).eq('role','auditor').eq('is_active',true).maybeSingle();
+    if(data){
+      btnA.disabled=false; btnA.style.opacity='1';
+      btnR.disabled=false; btnR.style.opacity='1';
+      status.textContent=`✅ ยืนยัน: ${data.name||'Auditor'}`; status.style.color='var(--green)';
+      document.getElementById('btnWrAuditApprove')._auditorId=data.id;
+      document.getElementById('btnWrAuditApprove')._auditorName=data.name;
+    } else {
+      btnA.disabled=true; btnA.style.opacity='.4';
+      btnR.disabled=true; btnR.style.opacity='.4';
+      status.textContent='❌ PIN ไม่ถูกต้อง'; status.style.color='var(--red)';
+      document.getElementById('wrAuditPin').value='';
+    }
+  }catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
+}
+
+async function auditWithdraw(action){
+  const note=document.getElementById('wrAuditNote').value.trim();
+  const auditorName=document.getElementById('btnWrAuditApprove')._auditorName||'Auditor';
+  if(!_activeWrId) return;
+  showLoading(true,action==='approve'?'กำลังบันทึกผลตรวจสอบ...':'กำลังปฏิเสธ...');
+  try{
+    const newStatus=action==='approve'?'audited':'rejected';
+    const {error}=await sb.from('petty_cash_withdrawals').update({
+      status:newStatus,
+      audit_note:note||null,
+      audited_by_name:auditorName,
+      audited_at:new Date().toISOString()
+    }).eq('id',_activeWrId);
+    if(error) throw new Error(error.message);
+    await addAudit('edit',
+      `${action==='approve'?'ผ่านการตรวจสอบ':'ปฏิเสธ'}คำขอเบิก | โดย: ${auditorName} (Auditor)${note?' | หมายเหตุ: '+note:''}`
+    );
+    await loadWithdrawRequests();
+    closeModal('wrAuditModal');
+    renderWithdrawList();
+    showToast(action==='approve'?'บันทึกผลตรวจสอบแล้ว — รอผู้จัดการอนุมัติ ✅':'ปฏิเสธคำขอเบิกแล้ว','success');
+  }catch(e){ showToast('ล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+// ── Manager Final Approve Modal ──
+function openWrMgrModal(wrId){
+  _activeWrId=wrId;
+  const wr=withdrawRequests.find(w=>w.id===wrId);
+  if(!wr) return;
+  document.getElementById('wrMgrInfo').innerHTML=
+    `<strong>คำขอเบิก ฿${fmt2(wr.requested_amount)}</strong><br>
+    โดย: ${wr.requested_by_name||''} · ผ่านการตรวจสอบโดย: ${wr.audited_by_name||''}
+    ${wr.audit_note?`<br>หมายเหตุผู้ตรวจสอบ: ${wr.audit_note}`:''}`;
+  document.getElementById('wrMgrNote').value='';
+  document.getElementById('wrMgrPin').value='';
+  document.getElementById('wrMgrPinStatus').textContent='';
+  const btnA=document.getElementById('btnWrMgrApprove');
+  const btnR=document.getElementById('btnWrMgrReject');
+  btnA.disabled=true; btnA.style.opacity='.4';
+  btnR.disabled=true; btnR.style.opacity='.4';
+  openModal('wrMgrModal');
+  setTimeout(()=>document.getElementById('wrMgrPin').focus(),200);
+}
+
+async function checkWrMgrPin(){
+  const val=document.getElementById('wrMgrPin').value;
+  const status=document.getElementById('wrMgrPinStatus');
+  const btnA=document.getElementById('btnWrMgrApprove');
+  const btnR=document.getElementById('btnWrMgrReject');
+  if(val.length<4){
+    btnA.disabled=true; btnA.style.opacity='.4';
+    btnR.disabled=true; btnR.style.opacity='.4';
+    status.textContent=''; return;
+  }
+  try{
+    const {data}=await sb.from('petty_cash_users')
+      .select('id,name,role').eq('pin_value',val).eq('role','manager').eq('is_active',true).maybeSingle();
+    if(data){
+      btnA.disabled=false; btnA.style.opacity='1';
+      btnR.disabled=false; btnR.style.opacity='1';
+      status.textContent=`✅ ยืนยัน: ${data.name||'Manager'}`; status.style.color='var(--green)';
+      btnA._mgrName=data.name;
+    } else {
+      btnA.disabled=true; btnA.style.opacity='.4';
+      btnR.disabled=true; btnR.style.opacity='.4';
+      status.textContent='❌ PIN ไม่ถูกต้อง'; status.style.color='var(--red)';
+      document.getElementById('wrMgrPin').value='';
+    }
+  }catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
+}
+
+async function mgrWithdraw(action){
+  const note=document.getElementById('wrMgrNote').value.trim();
+  const mgrName=document.getElementById('btnWrMgrApprove')._mgrName||'Manager';
+  const wr=withdrawRequests.find(w=>w.id===_activeWrId);
+  if(!wr) return;
+  showLoading(true,action==='approve'?'กำลังอนุมัติและเบิกเงิน...':'กำลังปฏิเสธ...');
+  try{
+    const newStatus=action==='approve'?'approved':'rejected';
+    const {error:we}=await sb.from('petty_cash_withdrawals').update({
+      status:newStatus,
+      mgr_note:note||null,
+      approved_by_name:mgrName,
+      approved_at:new Date().toISOString()
+    }).eq('id',_activeWrId);
+    if(we) throw new Error(we.message);
+
+    if(action==='approve'){
+      // บันทึกรายการรับเงินเข้า transactions อัตโนมัติ
+      const {error:te}=await sb.from('petty_cash_transactions').insert({
+        period_id:currentPeriod.id,
+        tx_date:new Date().toISOString().split('T')[0],
+        tx_type:'income',
+        acc_code:'1111-30 เงินสดย่อย (เติมเงิน)',
+        description:`เบิกเงิน — อนุมัติโดย ${mgrName}${note?' ('+note+')':''}`,
+        amount:wr.requested_amount,
+        by_role:'manager',
+        by_name:mgrName
+      });
+      if(te) throw new Error(te.message);
+      await addAudit('edit',
+        `อนุมัติเบิกเงิน ฿${fmt2(wr.requested_amount)} | โดย: ${mgrName} (Manager) | บันทึกเป็นรายรับอัตโนมัติ${note?' | หมายเหตุ: '+note:''}`
+      );
+      await loadTransactions();
+    } else {
+      await addAudit('edit',
+        `ปฏิเสธคำขอเบิก ฿${fmt2(wr.requested_amount)} | โดย: ${mgrName} (Manager)${note?' | เหตุผล: '+note:''}`
+      );
+    }
+    await loadWithdrawRequests();
+    closeModal('wrMgrModal');
+    render();
+    renderWithdrawList();
+    showToast(action==='approve'?`อนุมัติเบิก ฿${fmt2(wr.requested_amount)} บาท เรียบร้อย ✅`:'ปฏิเสธคำขอเบิกแล้ว','success');
+  }catch(e){ showToast('ล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+
+function fmtDatetime(ts){
+  if(!ts) return '—';
+  return ts.replace('T',' ').slice(0,16);
+}
+
+// ══════════════════════════════════════════════
 // MODAL / UTILITY HELPERS
 // ══════════════════════════════════════════════
 function openModal(id){ document.getElementById(id).classList.add('open'); }
@@ -2091,7 +2529,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal','preCountModal'].forEach(id=>{
+  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -2099,7 +2537,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal','preCountModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
