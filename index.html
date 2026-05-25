@@ -354,7 +354,7 @@ tbody tr:hover td{background:#fafaf7}
 <!-- Tabs -->
 <div class="tabs no-print">
   <button class="tab on" onclick="switchTab('entries')">📋 บันทึกรายการ</button>
-  <button class="tab"    onclick="switchTab('count')">💰 นับเงินจริง</button>
+  <button class="tab"    onclick="switchTab('count')">🔒 ปิดวงเงินก้อนนี้</button>
   <button class="tab"    onclick="switchTab('summary')">📊 สรุปเดือน</button>
   <button class="tab"    onclick="switchTab('reconcile')">✅ ตรวจนับ</button>
   <button class="tab"    onclick="switchTab('withdraw')">🏦 เบิกเงิน</button>
@@ -1441,6 +1441,15 @@ function updateThaiDate(){
 }
 
 function setType(t){
+  // ถ้าเลือก "รับเงิน (เติม)" → เช็คว่ามีการปิดวงเงิน (นับเงินจริง) แล้วหรือยัง
+  if(t==='income' && (!countRecords || countRecords.length===0)){
+    closeModal('formModal');
+    setTimeout(()=>{
+      alert('⚠️ กรุณาปิดวงเงินก้อนนี้และนับเงินจริงก่อนเพิ่มวงเงินใหม่');
+      switchTab('count');
+    }, 150);
+    return;
+  }
   formType=t;
   document.getElementById('btnExp').className='type-btn'+(t==='expense'?' exp':'');
   document.getElementById('btnInc').className='type-btn'+(t==='income'?' inc':'');
