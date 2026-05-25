@@ -1433,6 +1433,8 @@ async function checkCountAuditPin(){
   }
 }
 
+const PETTY_CASH_LIMIT = 20000; // วงเงินสดย่อยสูงสุด
+
 async function confirmCountAudit(){
   if(!_pendingCount) return;
   const btn=document.getElementById('btnCountAuditConfirm');
@@ -1443,6 +1445,30 @@ async function confirmCountAudit(){
   closeModal('countAuditModal');
   await _saveCount(book,total,diff,fullNote,auditorName);
   _pendingCount=null;
+
+  // สร้างคำขอเบิกเงินอัตโนมัติ 20,000 บาท
+  const withdrawAmount = PETTY_CASH_LIMIT;
+  try{
+    const {error}=await sb.from('petty_cash_withdrawals').insert({
+      period_id:currentPeriod.id,
+      requested_amount:withdrawAmount,
+      counted_actual:total,
+      bal_book:book,
+      reason:`ปิดวงเงิน — นับจริง ${fmt2(total)} บาท | ต่าง ${fmt2(diff)} บาท | เบิกคืนวงเงิน ${fmt2(withdrawAmount)} บาท`,
+      status:'pending',
+      requested_by_name:currentUser?.name||currentRole,
+      requested_by_role:currentRole
+    });
+    if(error) throw new Error(error.message);
+    await addAudit('edit',
+      `สร้างคำขอเบิกอัตโนมัติ | จำนวน: ${fmt2(withdrawAmount)} บาท | นับจริง: ${fmt2(total)} บาท | ตรวจสอบโดย: ${auditorName}`
+    );
+    await loadWithdrawRequests();
+    renderWithdrawList();
+    showToast(`ปิดวงเงินแล้ว ✅ สร้างคำขอเบิก ${fmt2(withdrawAmount)} บาท — รอผู้จัดการอนุมัติ`,'success');
+  }catch(e){
+    showToast('บันทึกการนับสำเร็จ แต่สร้างคำขอเบิกล้มเหลว: '+e.message,'error');
+  }
 }
 async function _saveCount(book,real,diff,note,auditorName){
   showLoading(true,'บันทึกการนับเงิน...');
