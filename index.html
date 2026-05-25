@@ -733,6 +733,27 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 
 
+
+<!-- ─── RETURN CASH MODAL ─── -->
+<div class="modal-bg" id="returnCashModal">
+<div class="modal">
+  <h2>💵 เงินส่งคืนก่อนปิดวงเงิน</h2>
+  <div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8">
+    <b>ยอดที่นับจริงได้:</b> <span id="returnCashCountedAmt" style="font-family:'IBM Plex Mono',monospace;font-weight:700"></span> บาท<br>
+    <span style="font-size:12px;color:var(--muted)">มีเงินส่งคืนก่อนรับวงเงินใหม่ไหม?</span>
+  </div>
+  <div class="field">
+    <label>จำนวนเงินที่ส่งคืน (บาท)</label>
+    <input type="number" id="returnCashAmt" placeholder="0 = ไม่มีเงินส่งคืน" min="0" oninput="previewReturnCash()" style="font-family:'IBM Plex Mono',monospace">
+    <div id="returnCashPreview" style="margin-top:6px;font-size:12px;color:var(--muted)"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('returnCashModal')">ยกเลิก</button>
+    <button class="btn btn-dark btn-save" onclick="confirmReturnCash()">ถัดไป → ผู้ตรวจสอบยืนยัน</button>
+  </div>
+</div>
+</div>
+
 <!-- ─── COUNT AUDIT MODAL ─── -->
 <div class="modal-bg" id="countAuditModal">
 <div class="modal">
@@ -1474,12 +1495,40 @@ async function saveCountRecord(){
   }
   // เก็บไว้รอ auditor ยืนยัน
   _pendingCount={book,total,diff,note};
-  // แสดง popup ให้ auditor ยืนยัน
+  // เปิด popup ถามเงินส่งคืนก่อน
+  document.getElementById('returnCashCountedAmt').textContent=fmt2(total);
+  document.getElementById('returnCashAmt').value='';
+  document.getElementById('returnCashPreview').textContent='';
+  openModal('returnCashModal');
+  setTimeout(()=>document.getElementById('returnCashAmt').focus(),200);
+}
+
+function previewReturnCash(){
+  const val=parseFloat(document.getElementById('returnCashAmt').value)||0;
+  const counted=_pendingCount?_pendingCount.total:0;
+  const prev=document.getElementById('returnCashPreview');
+  if(val<=0){ prev.textContent='ไม่มีเงินส่งคืน'; return; }
+  if(val>counted){ prev.innerHTML=`<span style="color:var(--red)">⚠️ จำนวนส่งคืนมากกว่าเงินที่นับได้</span>`; return; }
+  prev.innerHTML=`ระบบจะบันทึก <b style="color:var(--red)">คืนเงินสดย่อย ${fmt2(val)} บาท</b> ให้อัตโนมัติ`;
+}
+
+async function confirmReturnCash(){
+  if(!_pendingCount) return;
+  const returnAmt=parseFloat(document.getElementById('returnCashAmt').value)||0;
+  if(returnAmt>_pendingCount.total){
+    showToast('จำนวนส่งคืนมากกว่าเงินที่นับได้','error'); return;
+  }
+  _pendingCount.returnAmt=returnAmt;
+  closeModal('returnCashModal');
+
+  // เปิด countAuditModal
+  const {book,total,diff,note}=_pendingCount;
   const diffTxt=Math.abs(diff)<0.005?'<span style="color:var(--green)">✅ ยอดตรง</span>':`<span style="color:var(--red)">⚠️ ต่างกัน ${fmt2(Math.abs(diff))} บาท</span>`;
   document.getElementById('countAuditInfo').innerHTML=
     `<b>ยอดตามบัญชี:</b> ${fmt2(book)} บาท<br>`+
     `<b>นับจริงได้:</b> ${fmt2(total)} บาท<br>`+
     `<b>ผลต่าง:</b> ${diffTxt}`+
+    (returnAmt>0?`<br><b>เงินส่งคืน:</b> <span style="color:var(--red)">${fmt2(returnAmt)} บาท</span> (ระบบบันทึกให้อัตโนมัติ)`:'')+
     (note?`<br><b>หมายเหตุ:</b> ${note}`:'');
   document.getElementById('countAuditPin').value='';
   document.getElementById('countAuditPinStatus').textContent='';
@@ -1519,6 +1568,27 @@ async function confirmCountAudit(){
   const {book,total,diff,note}=_pendingCount;
   const fullNote=(note+(auditorNote?(' | ตรวจสอบโดย: '+auditorName+(auditorNote?' — '+auditorNote:'')):'') )||'';
   closeModal('countAuditModal');
+
+  // บันทึกรายการคืนเงินสดย่อยอัตโนมัติ (ถ้ามี)
+  const returnAmt=_pendingCount.returnAmt||0;
+  if(returnAmt>0){
+    showLoading(true,'บันทึกรายการคืนเงินสดย่อย...');
+    try{
+      await sb.from('petty_cash_transactions').insert({
+        period_id:currentPeriod.id,
+        tx_date:todayStr(),
+        tx_type:'expense',
+        amount:returnAmt,
+        acc_code:'1111-10',
+        description:`คืนเงินสดย่อย (ปิดวงเงิน) | ตรวจสอบโดย: ${auditorName}`,
+        created_by:currentUser?.name||currentRole
+      });
+      await addAudit('add',`บันทึกคืนเงินสดย่อยอัตโนมัติ ${fmt2(returnAmt)} บาท | ตรวจสอบโดย: ${auditorName}`);
+      await loadTransactions();
+    }catch(e){ showToast('บันทึกคืนเงินล้มเหลว: '+e.message,'error'); }
+    showLoading(false);
+  }
+
   await _saveCount(book,total,diff,fullNote,auditorName);
   _pendingCount=null;
 
@@ -2720,7 +2790,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal'].forEach(id=>{
+  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -2728,7 +2798,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
