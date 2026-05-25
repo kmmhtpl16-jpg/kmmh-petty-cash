@@ -10,7 +10,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#f5f3ee;--white:#fff;--dark:#1a1a1a;
-  --border:#e4e0d8;--border2:#ccc9c0;
+  --border:#e4e0d8;--border2:#ccc9c0;h
   --red:#c0392b;--red-bg:#fde8e8;--red-border:#f5b7b1;
   --green:#1e8449;--green-bg:#e8f5ee;--green-border:#a9dfbf;
   --amber:#b7770d;--amber-bg:#fef9e7;--amber-border:#f0c040;
@@ -136,7 +136,7 @@ tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:#fafaf7}
 .locked-row td{opacity:.7}
 .badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px}
-.badge-exp{background:var(--red-bg);color:var(--red)}
+.badge-exp{background:var(--red-bg);color:var(--red)}.badge-ret{background:#e6f3ff;color:#2563eb;border:1px solid #bfdbfe}.num-amber{color:#d97706;font-family:'IBM Plex Mono',monospace}
 .badge-inc{background:var(--green-bg);color:var(--green)}
 .badge-lock{background:#f0f0f0;color:#999;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:3px}
 .mono{font-family:'IBM Plex Mono',monospace}
@@ -576,6 +576,7 @@ tbody tr:hover td{background:#fafaf7}
   <div class="field">
     <label>วันที่</label>
     <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="fDateText" placeholder="วว/ดด/ปปปป" maxlength="10" oninput="syncThaiDateInput(this)" style="border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:14px;background:var(--white);font-family:'IBM Plex Mono',monospace;color:var(--text);width:130px;outline:none;" onfocus="this.style.borderColor='#4a9eff';this.style.boxShadow='0 0 0 2px rgba(74,158,255,0.2)'" onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
       <div style="position:relative;flex:1">
         <input type="date" id="fDate" oninput="updateThaiDate()" style="position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer;z-index:2">
         <div onclick="document.getElementById('fDate').showPicker?document.getElementById('fDate').showPicker():document.getElementById('fDate').click()" style="display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:14px;cursor:pointer;background:var(--white);font-family:'IBM Plex Mono',monospace;color:var(--text)">
@@ -1308,8 +1309,8 @@ function renderTable(){
       <td style="text-align:right"><span class="${tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
       <td><div class="acct-cell">${tx.acc_code||'<span style="color:#ccc">—</span>'}</div>${tx.description?`<div class="note-cell">${tx.description}</div>`:''}</td>
       <td style="text-align:center">${receiptBtn}</td>
-      <td style="text-align:right"><span class="${neg?'num-neg':'num-norm'}">${fmt2(tx.runBal)}</span></td>
-      <td class="no-print"><div style="display:flex;gap:4px">${actButtons}</div></td>
+            <td><span class="badge ${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'badge-ret':tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'คืน':tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
+                  <td style="text-align:right"><span class="${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'num-amber':tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
     </tr>`;
   });
   document.getElementById('entryTbody').innerHTML=h;
@@ -1506,8 +1507,14 @@ async function saveCountRecord(){
   _pendingCount={book,total,diff,note};
   // เปิด popup ถามเงินส่งคืนก่อน
   document.getElementById('returnCashCountedAmt').textContent=fmt2(total);
-  document.getElementById('returnCashAmt').value='';
-  document.getElementById('returnCashPreview').textContent='';
+  // ถ้าวงเงินติดลบ ให้ auto-fill เงินคืน = เงินที่นับจริงได้ทั้งหมด
+    if(book<0&&total>0){
+          document.getElementById('returnCashAmt').value=total;
+          previewReturnCash();
+    } else {
+          document.getElementById('returnCashAmt').value='';
+          document.getElementById('returnCashPreview').textContent='';
+    }
   openModal('returnCashModal');
   setTimeout(()=>document.getElementById('returnCashAmt').focus(),200);
 }
@@ -1691,17 +1698,31 @@ function openEditTx(id){
   openModal('formModal');
 }
 
-function updateThaiDate(){
-  const val=document.getElementById('fDate').value;
-  if(!val){ document.getElementById('fDateThai').textContent=''; return; }
-  const[y,m,d]=val.split('-');
-  document.getElementById('fDateThai').textContent=`${d}/${m}/${+y+543}`;
-}
-
-function setType(t){
-  // ถ้าเลือก "รับเงิน (เติม)" → เช็คว่ามีการปิดวงเงิน (นับเงินจริง) แล้วหรือยัง
-  if(t==='income' && (!countRecords || countRecords.length===0)){
-    closeModal('formModal');
+  function updateThaiDate(){
+      const val=document.getElementById('fDate').value;
+      if(!val){ document.getElementById('fDateThai').textContent=''; return; }
+      const[y,m,d]=val.split('-');
+      const thaiStr=`${d}/${m}/${+y+543}`;
+      document.getElementById('fDateThai').textContent=thaiStr;
+      const txt=document.getElementById('fDateText');
+      if(txt) txt.value=thaiStr;
+  }
+  function syncThaiDateInput(input){
+      let val=input.value.replace(/[^0-9]/g,'');
+      if(val.length>2) val=val.substring(0,2)+'/'+val.substring(2);
+      if(val.length>5) val=val.substring(0,5)+'/'+val.substring(5);
+      if(val.length>10) val=val.substring(0,10);
+      input.value=val;
+      const parts=val.split('/');
+      if(parts.length===3&&parts[0].length===2&&parts[1].length===2&&parts[2].length===4){
+            const dd=parts[0],mm=parts[1],beYear=parseInt(parts[2]),adYear=beYear-543;
+            if(adYear>=2000&&adYear<=2100&&parseInt(mm)>=1&&parseInt(mm)<=12&&parseInt(dd)>=1&&parseInt(dd)<=31){
+                    const isoDate=`${adYear}-${mm}-${dd}`;
+                    document.getElementById('fDate').value=isoDate;
+                    document.getElementById('fDateThai').textContent=`${dd}/${mm}/${beYear}`;
+            }
+      }
+        closeModal('formModal');
     setTimeout(()=>{
       alert('⚠️ กรุณาปิดวงเงินก้อนนี้และนับเงินจริงก่อนเพิ่มวงเงินใหม่');
       switchTab('count');
