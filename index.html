@@ -861,6 +861,15 @@ let formType = 'expense';
 // ══════════════════════════════════════════════
 // PIN LOGIN — Auth via Supabase petty_cash_users
 // ══════════════════════════════════════════════
+// รองรับการกดแป้นพิมพ์สำหรับ PIN login
+document.addEventListener('keydown', function(e){
+  const loginScreen = document.getElementById('loginScreen');
+  if(!loginScreen || loginScreen.style.display==='none') return;
+  if(e.key>='0'&&e.key<='9') pinKey(e.key);
+  else if(e.key==='Backspace') pinKey('back');
+  else if(e.key==='Enter' && pinBuffer.length===4) submitPin();
+});
+
 function pinKey(k){
   if(pinBuffer.length>=4) return;
   pinBuffer+=k;
@@ -2051,6 +2060,7 @@ function openCloseMonthModal(){
   btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
   previewCloseMonth();
   openModal('closeMonthModal');
+  setTimeout(()=>document.getElementById('cmActual').focus(),200);
 }
 
 function previewCloseMonth(){
