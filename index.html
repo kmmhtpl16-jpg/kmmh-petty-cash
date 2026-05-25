@@ -576,8 +576,13 @@ tbody tr:hover td{background:#fafaf7}
   <div class="field">
     <label>วันที่</label>
     <div style="display:flex;gap:8px;align-items:center">
-      <input type="date" id="fDate" oninput="updateThaiDate()" style="flex:1">
-      <span id="fDateThai" style="font-size:13px;color:var(--muted);white-space:nowrap;font-family:'IBM Plex Mono',monospace"></span>
+      <div style="position:relative;flex:1">
+        <input type="date" id="fDate" oninput="updateThaiDate()" style="position:absolute;opacity:0;width:100%;height:100%;top:0;left:0;cursor:pointer;z-index:2">
+        <div onclick="document.getElementById('fDate').showPicker?document.getElementById('fDate').showPicker():document.getElementById('fDate').click()" style="display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:14px;cursor:pointer;background:var(--white);font-family:'IBM Plex Mono',monospace;color:var(--text)">
+          <span style="font-size:14px">📅</span>
+          <span id="fDateThai" style="flex:1">—</span>
+        </div>
+      </div>
     </div>
   </div>
   <div class="field">
@@ -2527,7 +2532,10 @@ async function mgrWithdraw(action){
 
 function fmtDatetime(ts){
   if(!ts) return '—';
-  return ts.replace('T',' ').slice(0,16);
+  const s=ts.replace('T',' ').slice(0,16); // "YYYY-MM-DD HH:MM"
+  const[datePart,timePart]=s.split(' ');
+  const[y,m,d]=datePart.split('-');
+  return `${d}/${m}/${+y+543} ${timePart||''}`.trim();
 }
 
 // ══════════════════════════════════════════════
