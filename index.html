@@ -732,6 +732,28 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 </div>
 
+
+<!-- ─── COUNT AUDIT MODAL ─── -->
+<div class="modal-bg" id="countAuditModal">
+<div class="modal">
+  <h2>🔍 ยืนยันการตรวจนับเงิน</h2>
+  <div id="countAuditInfo" style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8"></div>
+  <div class="field">
+    <label>หมายเหตุผู้ตรวจสอบ (ถ้ามี)</label>
+    <textarea id="countAuditNote" placeholder="ข้อสังเกต..."></textarea>
+  </div>
+  <div class="mgr-pin-wrap">
+    <label>🔑 PIN ผู้ตรวจสอบ — จำเป็น</label>
+    <input type="password" id="countAuditPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCountAuditPin()" autocomplete="off">
+    <div class="mgr-pin-status" id="countAuditPinStatus"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('countAuditModal')">ยกเลิก</button>
+    <button class="btn btn-dark btn-save" id="btnCountAuditConfirm" onclick="confirmCountAudit()" disabled style="opacity:.4;cursor:not-allowed">✅ ยืนยันการตรวจนับ</button>
+  </div>
+</div>
+</div>
+
 <!-- ─── LIGHTBOX ─── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightboxImg" src="" alt="receipt">
@@ -1360,20 +1382,69 @@ function clearCount(){
   calcCount();
 }
 
+// เก็บข้อมูลการนับรอ auditor ยืนยัน
+let _pendingCount = null;
+
 async function saveCountRecord(){
   const total=Array.from(document.querySelectorAll('.denom-input')).reduce((s,i)=>s+(parseInt(i.value)||0)*parseInt(i.dataset.val),0);
   if(total===0&&!confirm('ยอดที่นับเป็น 0 บาท ยืนยันบันทึก?')) return;
   const book=closing();
   const diff=total-book;
+  let note='';
   if(Math.abs(diff)>0.005){
-    const note=prompt(`ยอดต่างกัน ${fmt2(Math.abs(diff))} บาท\nกรุณาระบุสาเหตุ:`,'');
-    if(note===null) return; // cancel
-    await _saveCount(book,total,diff,note||'(ไม่ระบุ)');
+    const n=prompt(`ยอดต่างกัน ${fmt2(Math.abs(diff))} บาท\nกรุณาระบุสาเหตุ:`,'');
+    if(n===null) return;
+    note=n||'(ไม่ระบุ)';
+  }
+  // เก็บไว้รอ auditor ยืนยัน
+  _pendingCount={book,total,diff,note};
+  // แสดง popup ให้ auditor ยืนยัน
+  const diffTxt=Math.abs(diff)<0.005?'<span style="color:var(--green)">✅ ยอดตรง</span>':`<span style="color:var(--red)">⚠️ ต่างกัน ${fmt2(Math.abs(diff))} บาท</span>`;
+  document.getElementById('countAuditInfo').innerHTML=
+    `<b>ยอดตามบัญชี:</b> ${fmt2(book)} บาท<br>`+
+    `<b>นับจริงได้:</b> ${fmt2(total)} บาท<br>`+
+    `<b>ผลต่าง:</b> ${diffTxt}`+
+    (note?`<br><b>หมายเหตุ:</b> ${note}`:'');
+  document.getElementById('countAuditPin').value='';
+  document.getElementById('countAuditPinStatus').textContent='';
+  document.getElementById('countAuditNote').value='';
+  const btn=document.getElementById('btnCountAuditConfirm');
+  btn.disabled=true; btn.style.opacity='.4';
+  openModal('countAuditModal');
+  setTimeout(()=>document.getElementById('countAuditPin').focus(),200);
+}
+
+async function checkCountAuditPin(){
+  const val=document.getElementById('countAuditPin').value;
+  const status=document.getElementById('countAuditPinStatus');
+  const btn=document.getElementById('btnCountAuditConfirm');
+  btn.disabled=true; btn.style.opacity='.4'; btn._auditorName=''; btn._auditorId='';
+  if(val.length<4) return;
+  const {data,error}=await sb.from('petty_cash_users')
+    .select('id,name,role').eq('pin_value',val).eq('role','auditor').eq('is_active',true).maybeSingle();
+  if(error||!data){
+    status.textContent='❌ PIN ไม่ถูกต้อง';
+    status.style.color='var(--red)';
   } else {
-    await _saveCount(book,total,diff,'');
+    status.textContent=`✅ ${data.name}`;
+    status.style.color='var(--green)';
+    btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+    btn._auditorName=data.name; btn._auditorId=data.id;
   }
 }
-async function _saveCount(book,real,diff,note){
+
+async function confirmCountAudit(){
+  if(!_pendingCount) return;
+  const btn=document.getElementById('btnCountAuditConfirm');
+  const auditorNote=document.getElementById('countAuditNote').value||'';
+  const auditorName=btn._auditorName||'';
+  const {book,total,diff,note}=_pendingCount;
+  const fullNote=(note+(auditorNote?(' | ตรวจสอบโดย: '+auditorName+(auditorNote?' — '+auditorNote:'')):'') )||'';
+  closeModal('countAuditModal');
+  await _saveCount(book,total,diff,fullNote,auditorName);
+  _pendingCount=null;
+}
+async function _saveCount(book,real,diff,note,auditorName){
   showLoading(true,'บันทึกการนับเงิน...');
   try{
     await sb.from('petty_cash_counts').insert({
@@ -1383,7 +1454,8 @@ async function _saveCount(book,real,diff,note){
       diff,
       note,
       by_role:currentRole,
-      by_name:currentUser?.name||currentRole
+      by_name:currentUser?.name||currentRole,
+      audited_by_name:auditorName||null
     });
     actualCash=String(real);
     document.getElementById('actualInput').value=real;
@@ -2546,7 +2618,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal'].forEach(id=>{
+  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -2554,7 +2626,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
