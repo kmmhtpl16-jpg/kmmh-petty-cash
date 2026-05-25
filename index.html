@@ -754,6 +754,24 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 </div>
 
+
+<!-- ─── DELETE COUNT MODAL ─── -->
+<div class="modal-bg" id="deleteCountModal">
+<div class="modal">
+  <h2>🗑 ลบรายการนับเงิน</h2>
+  <div id="deleteCountInfo" style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8;color:#7a0000"></div>
+  <div class="mgr-pin-wrap">
+    <label>🔑 PIN ผู้ตรวจสอบ หรือ ผู้จัดการ — จำเป็น</label>
+    <input type="password" id="deleteCountPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkDeleteCountPin()" autocomplete="off">
+    <div class="mgr-pin-status" id="deleteCountPinStatus"></div>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('deleteCountModal')">ยกเลิก</button>
+    <button class="btn" id="btnDeleteCountConfirm" onclick="confirmDeleteCount()" disabled style="opacity:.4;cursor:not-allowed;background:var(--red);color:white;border:none;border-radius:8px;padding:10px 20px;font-size:14px">🗑 ยืนยันลบ</button>
+  </div>
+</div>
+</div>
+
 <!-- ─── LIGHTBOX ─── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightboxImg" src="" alt="receipt">
@@ -1334,14 +1352,70 @@ function renderAudit(){
 
 function renderCountHistory(){
   if(!countRecords.length){ document.getElementById('countHistory').innerHTML=`<div class="empty">ยังไม่มีประวัติการนับเงิน</div>`; return; }
-  let h=`<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted);text-align:left">เวลา</th><th style="text-align:right;padding:6px 10px">บัญชี</th><th style="text-align:right;padding:6px 10px">จริง</th><th style="text-align:right;padding:6px 10px">ต่าง</th><th style="padding:6px 10px">หมายเหตุ</th></tr></thead><tbody>`;
+  const canDelete=(currentRole==='auditor'||currentRole==='manager');
+  let h=`<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted);text-align:left">เวลา</th><th style="text-align:right;padding:6px 10px">บัญชี</th><th style="text-align:right;padding:6px 10px">จริง</th><th style="text-align:right;padding:6px 10px">ต่าง</th><th style="padding:6px 10px">หมายเหตุ</th>${canDelete?'<th style="padding:6px 10px"></th>':''}</tr></thead><tbody>`;
   countRecords.forEach(c=>{
     const d=parseFloat(c.diff||0);
-    const dt=c.counted_at?(c.counted_at.replace('T',' ').slice(0,16)):'—';
-    h+=`<tr><td style="padding:5px 10px">${dt}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;padding:5px 10px">${fmt2(c.bal_book)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--amber);padding:5px 10px">${fmt2(c.bal_real)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${Math.abs(d)<0.005?'var(--green)':d>0?'var(--amber)':'var(--red)'};padding:5px 10px">${fmt2(d)}</td><td style="font-size:11px;color:var(--muted);padding:5px 10px">${c.note||'—'}</td></tr>`;
+    const dt=c.counted_at?fmtDatetime(c.counted_at):'—';
+    h+=`<tr>
+      <td style="padding:5px 10px">${dt}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace;padding:5px 10px">${fmt2(c.bal_book)}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--amber);padding:5px 10px">${fmt2(c.bal_real)}</td>
+      <td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${Math.abs(d)<0.005?'var(--green)':d>0?'var(--amber)':'var(--red)'};padding:5px 10px">${fmt2(d)}</td>
+      <td style="font-size:11px;color:var(--muted);padding:5px 10px">${c.note||'—'}</td>
+      ${canDelete?`<td style="padding:5px 10px"><button onclick="openDeleteCountModal('${c.id}','${fmt2(c.bal_real)}')" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer">🗑 ลบ</button></td>`:''}
+    </tr>`;
   });
   h+=`</tbody></table>`;
   document.getElementById('countHistory').innerHTML=h;
+}
+
+// ── Delete Count Modal helpers ──
+let _deleteCountId=null;
+function openDeleteCountModal(id,realAmt){
+  _deleteCountId=id;
+  document.getElementById('deleteCountInfo').innerHTML=`ลบรายการนับเงิน <b>${realAmt} บาท</b> ออกจากระบบ<br><span style="color:var(--red);font-size:12px">⚠️ ไม่สามารถกู้คืนได้</span>`;
+  document.getElementById('deleteCountPin').value='';
+  document.getElementById('deleteCountPinStatus').textContent='';
+  const btn=document.getElementById('btnDeleteCountConfirm');
+  btn.disabled=true; btn.style.opacity='.4';
+  openModal('deleteCountModal');
+  setTimeout(()=>document.getElementById('deleteCountPin').focus(),200);
+}
+async function checkDeleteCountPin(){
+  const val=document.getElementById('deleteCountPin').value;
+  const status=document.getElementById('deleteCountPinStatus');
+  const btn=document.getElementById('btnDeleteCountConfirm');
+  btn.disabled=true; btn.style.opacity='.4';
+  if(val.length<4) return;
+  const {data,error}=await sb.from('petty_cash_users')
+    .select('id,name,role').eq('pin_value',val).in('role',['auditor','manager']).eq('is_active',true).maybeSingle();
+  if(error||!data){
+    status.textContent='❌ PIN ไม่ถูกต้อง (ต้องเป็นผู้ตรวจสอบหรือผู้จัดการ)';
+    status.style.color='var(--red)';
+  } else {
+    status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
+    status.style.color='var(--green)';
+    btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+    btn._confirmedBy=data.name;
+  }
+}
+async function confirmDeleteCount(){
+  if(!_deleteCountId) return;
+  const btn=document.getElementById('btnDeleteCountConfirm');
+  const confirmedBy=btn._confirmedBy||'';
+  closeModal('deleteCountModal');
+  showLoading(true,'กำลังลบรายการนับเงิน...');
+  try{
+    const {error}=await sb.from('petty_cash_counts').delete().eq('id',_deleteCountId);
+    if(error) throw new Error(error.message);
+    await addAudit('edit',`ลบรายการนับเงิน ID:${_deleteCountId} | ยืนยันโดย: ${confirmedBy}`);
+    await loadCounts();
+    renderCountHistory(); renderReconcile(); renderCards(); renderDiff();
+    showToast('ลบรายการนับเงินแล้ว ✅','success');
+  }catch(e){ showToast('ลบล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+  _deleteCountId=null;
 }
 
 // ══════════════════════════════════════════════
@@ -2644,7 +2718,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal'].forEach(id=>{
+  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -2652,7 +2726,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
