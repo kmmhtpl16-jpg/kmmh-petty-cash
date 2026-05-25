@@ -1318,14 +1318,16 @@ function renderReconcile(){
   else{ panel.className='rec-panel bad'; title.innerHTML=`🔴 ยอดต่างกัน <span class="mono"> ${fmt2(Math.abs(diff))} บาท</span> — ${diff<0?'เงินขาด ต้องตรวจสอบ':'เงินเกิน ตรวจสอบรายการ'}`; grid.innerHTML=recGridHTML(cl,actual,diff); }
   let h='';
   if(!countRecords.length) h=`<div class="empty">ยังไม่มีประวัติการนับเงิน</div>`;
+  const canDel=(currentRole==='auditor'||currentRole==='manager');
   [...countRecords].forEach(c=>{
     const d=parseFloat(c.diff||0);
-    const dt=c.counted_at?(c.counted_at.replace('T',' ').slice(0,16)):'—';
-    h+=`<div class="sum-row">
-      <div style="font-size:12px;min-width:100px">${dt}</div>
+    const dt=c.counted_at?fmtDatetime(c.counted_at):'—';
+    h+=`<div class="sum-row" style="align-items:center">
+      <div style="font-size:12px;min-width:120px">${dt}</div>
       <div style="font-size:12px;color:var(--muted);flex:1">บัญชี ${fmt2(c.bal_book)} บาท</div>
       <div style="font-size:12px;color:var(--muted)">จริง ${fmt2(c.bal_real)} บาท</div>
       <div style="margin-left:8px"><span class="badge ${Math.abs(d)<0.005?'badge-inc':'badge-exp'}">${Math.abs(d)<0.005?'ตรง ✅':d>0?`เกิน +${fmt2(d)}`:`ขาด ${fmt2(Math.abs(d))}`}</span></div>
+      ${canDel?`<button onclick="openDeleteCountModal('${c.id}','${fmt2(c.bal_real)}')" style="margin-left:8px;background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer">🗑 ลบ</button>`:''}
     </div>`;
     if(c.note) h+=`<div style="padding:2px 14px 6px;font-size:11px;color:var(--muted)">💬 ${c.note}</div>`;
   });
