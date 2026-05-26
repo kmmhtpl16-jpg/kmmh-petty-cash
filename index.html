@@ -1431,6 +1431,7 @@ async function checkDeleteCountPin(){
     status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
     status.style.color='var(--green)';
     btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+    btn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     btn._confirmedBy=data.name;
   }
 }
