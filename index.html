@@ -1416,7 +1416,7 @@ function openDeleteCountModal(id,realAmt){
   openModal('deleteCountModal');
   setTimeout(()=>document.getElementById('deleteCountPin').focus(),200);
 }
-async function checkDeleteCountPin(){
+async async function checkDeleteCountPin(){
   const val=document.getElementById('deleteCountPin').value;
   const status=document.getElementById('deleteCountPinStatus');
   const btn=document.getElementById('btnDeleteCountConfirm');
