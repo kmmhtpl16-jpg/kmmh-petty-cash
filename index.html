@@ -193,7 +193,7 @@ tbody tr:hover td{background:#fafaf7}
 /* ── Modal ── */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:500;padding:1rem;opacity:0;pointer-events:none;transition:opacity .18s}
 .modal-bg.open{opacity:1;pointer-events:all}
-.modal{background:var(--white);border-radius:14px;padding:1.5rem;width:100%;max-width:460px;box-shadow:0 12px 50px rgba(0,0,0,.22);transform:translateY(16px);transition:transform .18s;max-height:92vh;overflow:hidden;display:flex;flex-direction:column}
+.modal{background:var(--white);border-radius:14px;padding:1.5rem 1.5rem 0;width:100%;max-width:460px;box-shadow:0 12px 50px rgba(0,0,0,.22);transform:translateY(16px);transition:transform .18s;max-height:92vh;overflow-y:auto}
 .modal-bg.open .modal{transform:translateY(0)}
 .modal h2{font-size:16px;font-weight:700;margin-bottom:1.2rem}
 .field{margin-bottom:.85rem;position:relative}
@@ -207,7 +207,7 @@ tbody tr:hover td{background:#fafaf7}
 .type-btn.exp{background:var(--red-bg);border-color:var(--red);color:var(--red)}
 .type-btn.inc{background:var(--green-bg);border-color:var(--green);color:var(--green)}
 .receipt-preview{margin-top:.5rem;width:100%;max-height:160px;object-fit:contain;border-radius:7px;border:1px solid var(--border);display:none}
-.modal-btns{display:flex;gap:.5rem;margin-top:1.2rem;flex-shrink:0}.modal .mgr-pin-wrap{overflow-y:auto}
+.modal-btns{display:flex;gap:.5rem;margin-top:1.2rem;padding-bottom:1.5rem}
 .modal-btns .btn-save{flex:1;padding:9px;font-size:14px}
 .modal-btns .btn-cancel-sm{flex:0 0 78px;background:var(--white);color:#555;border:1.5px solid var(--border);border-radius:8px;padding:9px;font-size:13px;cursor:pointer;font-family:'Sarabun',sans-serif}
 .modal-btns .btn-cancel-sm:hover{border-color:var(--border2)}
