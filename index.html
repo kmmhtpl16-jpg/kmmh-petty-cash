@@ -2577,6 +2577,7 @@ async function submitWithdrawRequest(){
     actualCash=String(countedActual);
     document.getElementById('actualInput').value=countedActual;
     // สร้าง withdrawal request
+    const closingNow=closing();
     const {error}=await sb.from('petty_cash_withdrawals').insert({
       period_id:currentPeriod.id,
       requested_amount:amount,
@@ -2585,7 +2586,8 @@ async function submitWithdrawRequest(){
       reason:reason||null,
       status:'pending',
       requested_by_name:currentUser?.name||currentRole,
-      requested_by_role:currentRole
+      requested_by_role:currentRole,
+      closing_before:closingNow
     });
     if(error) throw new Error(error.message);
     await addAudit('edit',
