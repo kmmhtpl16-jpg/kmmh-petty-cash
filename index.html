@@ -136,7 +136,8 @@ tbody tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:#fafaf7}
 .locked-row td{opacity:.7}
 .badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px}
-.badge-exp{background:var(--red-bg);color:var(--red)}.badge-ret{background:#e6f3ff;color:#2563eb;border:1px solid #bfdbfe}.num-amber{color:#d97706;font-family:'IBM Plex Mono',monospace}
+.badge-exp{background:var(--red-bg);color:var(--red)}.badge-ret{background:#e6f3ff;color:#2563eb;border:1px solid #bfdbfe}
+.return-row td{background:#e3f2fd!important}.num-amber{color:#d97706;font-family:'IBM Plex Mono',monospace}
 .badge-inc{background:var(--green-bg);color:var(--green)}
 .badge-lock{background:#f0f0f0;color:#999;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:3px}
 .mono{font-family:'IBM Plex Mono',monospace}
@@ -1303,13 +1304,13 @@ function renderTable(){
       :isManager
         ?`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`
         :`<span style="font-size:11px;color:var(--muted2)">—</span>`;
-    h+=`<tr class="${locked?'locked-row':''}">
+    h+=`<tr class="${locked?'locked-row':''}${tx.is_return?' return-row':''}">
       <td class="mono" style="font-size:11px">${fmtDate(tx.tx_date)}</td>
-      <td><span class="badge ${tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
+      <td><span class="badge ${tx.is_return?'badge-ret':tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.is_return?'คืน':tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
       <td style="text-align:right"><span class="${tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
       <td><div class="acct-cell">${tx.acc_code||'<span style="color:#ccc">—</span>'}</div>${tx.description?`<div class="note-cell">${tx.description}</div>`:''}</td>
       <td style="text-align:center">${receiptBtn}</td>
-            <td><span class="badge ${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'badge-ret':tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'คืน':tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
+            <td><span class="badge ${tx.is_return?'badge-ret':tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'badge-ret':tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.is_return?'คืน':tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'คืน':tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
                   <td style="text-align:right"><span class="${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'num-amber':tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
     </tr>`;
   });
@@ -2628,6 +2629,7 @@ function renderWithdrawList(){
       </div>
       ${wr.audited_by_name?`<div class="wr-meta" style="margin-top:.25rem">🔍 ตรวจสอบโดย: ${wr.audited_by_name} · ${fmtDatetime(wr.audited_at)}${wr.audit_note?` · "${wr.audit_note}"`:''})</div>`:''}
       ${wr.approved_by_name?`<div class="wr-meta" style="margin-top:.25rem">✅ อนุมัติโดย: ${wr.approved_by_name} · ${fmtDatetime(wr.approved_at)}${wr.mgr_note?` · "${wr.mgr_note}"`:''})</div>`:''}
+      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − คืน ${fmt2(wr.counted_actual)} = <strong>${fmt2(wr.requested_amount-wr.counted_actual)}</strong> บาท</div>`:''}
       ${canAudit?`<div class="wr-actions">
         <button class="btn-reject" onclick="openWrAuditModal('${wr.id}','reject')">❌ ปฏิเสธ</button>
         <button class="btn-approve" onclick="openWrAuditModal('${wr.id}','approve')">🔍 ตรวจสอบและอนุมัติ</button>
@@ -2779,9 +2781,10 @@ async function mgrWithdraw(action){
 
     if(action==='approve'){
       // บันทึกรายการรับเงินเข้า transactions อัตโนมัติ
+      const today=new Date().toISOString().split('T')[0];
       const {error:te}=await sb.from('petty_cash_transactions').insert({
         period_id:currentPeriod.id,
-        tx_date:new Date().toISOString().split('T')[0],
+        tx_date:today,
         tx_type:'income',
         acc_code:'1111-30 เงินสดย่อย (เติมเงิน)',
         description:`เบิกเงิน — อนุมัติโดย ${mgrName}${note?' ('+note+')':''}`,
@@ -2790,6 +2793,24 @@ async function mgrWithdraw(action){
         by_name:mgrName
       });
       if(te) throw new Error(te.message);
+      // บันทึกรายการคืนเงินจากยอดนับจริง (อัตโนมัติ)
+      if(countRecords.length>0){
+        const balReal=parseFloat(countRecords[0].bal_real)||0;
+        if(balReal>0){
+          const {error:re}=await sb.from('petty_cash_transactions').insert({
+            period_id:currentPeriod.id,
+            tx_date:today,
+            tx_type:'income',
+            acc_code:'1111-30 เงินสดย่อย (เติมเงิน)',
+            description:'คืนเงินจากยอดนับจริง (อัตโนมัติ)',
+            amount:balReal,
+            is_return:true,
+            by_role:'manager',
+            by_name:mgrName
+          });
+          if(re) console.warn('คืนเงิน insert failed:',re.message);
+        }
+      }
       await addAudit('edit',
         `อนุมัติเบิกเงิน ฿${fmt2(wr.requested_amount)} | โดย: ${mgrName} (Manager) | บันทึกเป็นรายรับอัตโนมัติ${note?' | หมายเหตุ: '+note:''}`
       );
