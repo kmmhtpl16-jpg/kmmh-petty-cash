@@ -1355,7 +1355,7 @@ function renderReconcile(){
   const canDel=(currentRole==='auditor'||currentRole==='manager');
   [...countRecords].forEach(c=>{
     const d=parseFloat(c.diff||0);
-    const dt=c.counted_at?fmtDatetime(c.counted_at):'—';
+            const dt=c.count_date?fmtDate(c.count_date):'-';
     h+=`<div class="sum-row" style="align-items:center">
       <div style="font-size:12px;min-width:120px">${dt}</div>
       <div style="font-size:12px;color:var(--muted);flex:1">บัญชี ${fmt2(c.bal_book)} บาท</div>
