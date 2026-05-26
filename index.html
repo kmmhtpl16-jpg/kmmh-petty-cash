@@ -433,6 +433,8 @@ tbody tr:hover td{background:#fafaf7}
         <div style="margin-left:auto"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">ผลต่าง</div><div id="countDiffBadge" class="diff-badge diff-ok">± 0.00</div></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--muted);align-self:center">วันที่ปิดยอด:</label>
+        <input type="date" id="countDateInput" style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--white)">
         <button class="btn btn-dark" onclick="saveCountRecord()">✅ บันทึกการนับ + ปิดยอด</button>
         <button class="btn btn-outline" onclick="clearCount()">ล้าง</button>
       </div>
@@ -1506,7 +1508,8 @@ async function saveCountRecord(){
     note=n||'(ไม่ระบุ)';
   }
   // เก็บไว้รอ auditor ยืนยัน
-  _pendingCount={book,total,diff,note};
+  const countDate=document.getElementById('countDateInput')?.value||null;
+    _pendingCount={book,total,diff,note,count_date:countDate};
   // เปิด popup ถามเงินส่งคืนก่อน
   document.getElementById('returnCashCountedAmt').textContent=fmt2(total);
   // ถ้าวงเงินติดลบ ให้ auto-fill เงินคืน = เงินที่นับจริงได้ทั้งหมด
@@ -1607,7 +1610,7 @@ async function confirmCountAudit(){
     showLoading(false);
   }
 
-  await _saveCount(book,total,diff,fullNote,auditorName);
+  await _saveCount(book,total,diff,fullNote,auditorName,_pendingCount?.count_date||null);
   _pendingCount=null;
 
   // สร้างคำขอเบิกเงินอัตโนมัติ 20,000 บาท
@@ -1634,7 +1637,7 @@ async function confirmCountAudit(){
     showToast('บันทึกการนับสำเร็จ แต่สร้างคำขอเบิกล้มเหลว: '+e.message,'error');
   }
 }
-async function _saveCount(book,real,diff,note,auditorName){
+async function _saveCount(book,real,diff,note,auditorName,countDate){
   showLoading(true,'บันทึกการนับเงิน...');
   try{
     await sb.from('petty_cash_counts').insert({
@@ -1645,7 +1648,8 @@ async function _saveCount(book,real,diff,note,auditorName){
       note,
       by_role:currentRole,
       by_name:currentUser?.name||currentRole,
-      audited_by_name:auditorName||null
+      audited_by_name:auditorName||null,
+          count_date:countDate||null
     });
     actualCash=String(real);
     document.getElementById('actualInput').value=real;
