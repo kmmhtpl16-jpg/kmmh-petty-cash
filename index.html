@@ -780,15 +780,15 @@ tbody tr:hover td{background:#fafaf7}
 
 <!-- ─── DELETE COUNT MODAL ─── -->
 <div class="modal-bg" id="deleteCountModal">
-<div class="modal">
+<div class="modal" style="display:flex;flex-direction:column">
   <h2>🗑 ลบรายการนับเงิน</h2>
   <div id="deleteCountInfo" style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8;color:#7a0000"></div>
-  <div class="mgr-pin-wrap">
+  <div class="mgr-pin-wrap" style="flex:1">
     <label>🔑 PIN ผู้ตรวจสอบ หรือ ผู้จัดการ — จำเป็น</label>
     <input type="password" id="deleteCountPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkDeleteCountPin()" autocomplete="off">
     <div class="mgr-pin-status" id="deleteCountPinStatus"></div>
   </div>
-  <div class="modal-btns">
+  <div class="modal-btns" style="flex-shrink:0">
     <button class="btn-cancel-sm" onclick="closeModal('deleteCountModal')">ยกเลิก</button>
     <button class="btn" id="btnDeleteCountConfirm" onclick="confirmDeleteCount()" disabled style="opacity:.4;cursor:not-allowed;background:var(--red);color:white;border:none;border-radius:8px;padding:10px 20px;font-size:14px">🗑 ยืนยันลบ</button>
   </div>
@@ -1416,7 +1416,7 @@ function openDeleteCountModal(id,realAmt){
   openModal('deleteCountModal');
   setTimeout(()=>document.getElementById('deleteCountPin').focus(),200);
 }
-async async function checkDeleteCountPin(){
+asasync function checkDeleteCountPin(){
   const val=document.getElementById('deleteCountPin').value;
   const status=document.getElementById('deleteCountPinStatus');
   const btn=document.getElementById('btnDeleteCountConfirm');
