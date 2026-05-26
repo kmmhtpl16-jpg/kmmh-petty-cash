@@ -1070,7 +1070,7 @@ async function loadCounts(){
   if(!currentPeriod) return;
   const {data}=await sb.from('petty_cash_counts')
     .select('*').eq('period_id',currentPeriod.id)
-    .order('counted_at',{ascending:false});
+    .order('count_date',{ascending:false});
   countRecords=data||[];
 }
 async function loadAudit(){
@@ -1392,7 +1392,7 @@ function renderCountHistory(){
   let h=`<table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr><th style="padding:6px 10px;border-bottom:1px solid var(--border);color:var(--muted);text-align:left">เวลา</th><th style="text-align:right;padding:6px 10px">บัญชี</th><th style="text-align:right;padding:6px 10px">จริง</th><th style="text-align:right;padding:6px 10px">ต่าง</th><th style="padding:6px 10px">หมายเหตุ</th>${canDelete?'<th style="padding:6px 10px"></th>':''}</tr></thead><tbody>`;
   countRecords.forEach(c=>{
     const d=parseFloat(c.diff||0);
-    const dt=c.counted_at?fmtDatetime(c.counted_at):'—';
+            const dt=c.count_date?fmtDate(c.count_date):'-';
     h+=`<tr>
       <td style="padding:5px 10px">${dt}</td>
       <td style="text-align:right;font-family:'IBM Plex Mono',monospace;padding:5px 10px">${fmt2(c.bal_book)}</td>
