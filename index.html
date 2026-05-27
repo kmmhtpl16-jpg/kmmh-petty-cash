@@ -2637,7 +2637,7 @@ function renderWithdrawList(){
       </div>
       ${wr.audited_by_name?`<div class="wr-meta" style="margin-top:.25rem">🔍 ตรวจสอบโดย: ${wr.audited_by_name} · ${fmtDatetime(wr.audited_at)}${wr.audit_note?` · "${wr.audit_note}"`:''})</div>`:''}
       ${wr.approved_by_name?`<div class="wr-meta" style="margin-top:.25rem">✅ อนุมัติโดย: ${wr.approved_by_name} · ${fmtDatetime(wr.approved_at)}${wr.mgr_note?` · "${wr.mgr_note}"`:''})</div>`:''}
-      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − หนี้เก่า ${fmt2(deficit)} − คืน ${fmt2(wr.counted_actual||0)} = <strong>${fmt2(wr.requested_amount-deficit-(wr.counted_actual||0))}</strong> บาท
+      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − หนี้เก่า ${fmt2(deficit)} − คืน ${fmt2(wr.counted_actual||0)} = <strong>${fmt2(wr.requested_amount-deficit-(wr.counted_actual||0))}</strong> บาท`:`''`}
       ${canAudit?`<div class="wr-actions">
         <button class="btn-reject" onclick="openWrAuditModal('${wr.id}','reject')">❌ ปฏิเสธ</button>
         <button class="btn-approve" onclick="openWrAuditModal('${wr.id}','approve')">🔍 ตรวจสอบและอนุมัติ</button>
