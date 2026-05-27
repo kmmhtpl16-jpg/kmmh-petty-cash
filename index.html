@@ -1625,6 +1625,7 @@ async function confirmCountAudit(){
       status:'pending',
       requested_by_name:currentUser?.name||currentRole,
       requested_by_role:currentRole
+                closing_before:book,
     });
     if(error) throw new Error(error.message);
     await addAudit('edit',
