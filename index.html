@@ -10,7 +10,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#f5f3ee;--white:#fff;--dark:#1a1a1a;
-  --border:#e4e0d8;--border2:#ccc9c0;
+  --border:#e4e0d8;--border2:#ccc9c0;h
   --red:#c0392b;--red-bg:#fde8e8;--red-border:#f5b7b1;
   --green:#1e8449;--green-bg:#e8f5ee;--green-border:#a9dfbf;
   --amber:#b7770d;--amber-bg:#fef9e7;--amber-border:#f0c040;
@@ -2637,7 +2637,7 @@ function renderWithdrawList(){
       </div>
       ${wr.audited_by_name?`<div class="wr-meta" style="margin-top:.25rem">🔍 ตรวจสอบโดย: ${wr.audited_by_name} · ${fmtDatetime(wr.audited_at)}${wr.audit_note?` · "${wr.audit_note}"`:''})</div>`:''}
       ${wr.approved_by_name?`<div class="wr-meta" style="margin-top:.25rem">✅ อนุมัติโดย: ${wr.approved_by_name} · ${fmtDatetime(wr.approved_at)}${wr.mgr_note?` · "${wr.mgr_note}"`:''})</div>`:''}
-      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − หนี้เก่า ${fmt2(deficit)} = <strong>${fmt2(wr.requested_amount-deficit)}</strong> บาท</div>`:''}
+      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − หนี้เก่า ${fmt2(deficit)} − คืน ${fmt2(wr.counted_actual||0)} = <strong>${fmt2(wr.requested_amount-deficit-(wr.counted_actual||0))}</strong> บาท
       ${canAudit?`<div class="wr-actions">
         <button class="btn-reject" onclick="openWrAuditModal('${wr.id}','reject')">❌ ปฏิเสธ</button>
         <button class="btn-approve" onclick="openWrAuditModal('${wr.id}','approve')">🔍 ตรวจสอบและอนุมัติ</button>
@@ -2801,25 +2801,27 @@ async function mgrWithdraw(action){
         by_name:mgrName
       });
       if(te) throw new Error(te.message);
-      // บันทึกรายการคืนเงินจากยอดนับจริง (อัตโนมัติ)
-      if(countRecords.length>0){
-        const balReal=parseFloat(countRecords[0].bal_real)||0;
-        if(balReal>0){
-          const {error:re}=await sb.from('petty_cash_transactions').insert({
-            period_id:currentPeriod.id,
-            tx_date:today,
-            tx_type:'income',
-            acc_code:'1111-30 เงินสดย่อย (เติมเงิน)',
-            description:'คืนเงินจากยอดนับจริง (อัตโนมัติ)',
-            amount:balReal,
-            is_return:true,
-            by_role:'manager',
-            by_name:mgrName
-          });
-          if(re) console.warn('คืนเงิน insert failed:',re.message);
-        }
-      }
-      await addAudit('edit',
+      // บันทึกรายการคืนเงินสดย่อยจากยอดนับจริง (อัตโนมัติ) — บันทึกเป็น "รายจ่าย" (คืนเงิน)
+                // ตรรกะ: เงินที่นับได้จริงต้องคืน ไม่สามารถเก็บไว้ในกล่องได้
+                // ยอดที่ใช้ได้ = 20,000 - เงินเกิน - เงินนับจริงที่คืน
+                if(countRecords.length>0){
+                const balReal=parseFloat(countRecords[0].bal_real)||0;
+                if(balReal>0){
+                const {error:re}=await sb.from('petty_cash_transactions').insert({
+                period_id:currentPeriod.id,
+                tx_date:today,
+                tx_type:'expense',
+                acc_code:'1111-10 เงินสด - คืนเงินสดย่อย',
+                description:'คืนเงินสดย่อยจากยอดนับจริง (อัตโนมัติ) | ตรวจสอบโดย: '+mgrName,
+                amount:balReal,
+                is_return:true,
+                by_role:'manager',
+                by_name:mgrName
+                });
+                if(re) console.warn('คืนเงิน insert failed:',re.message);
+                }
+                }
+                await addAudit('edit',
         `อนุมัติเบิกเงิน ฿${fmt2(wr.requested_amount)} | โดย: ${mgrName} (Manager) | บันทึกเป็นรายรับอัตโนมัติ${note?' | หมายเหตุ: '+note:''}`
       );
       await loadTransactions();
