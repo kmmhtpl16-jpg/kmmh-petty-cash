@@ -1355,30 +1355,6 @@ function renderReconcile(){
   else if(Math.abs(diff)<0.005){ panel.className='rec-panel ok'; title.textContent='✅ ยอดตรง — เงินสดย่อยถูกต้อง'; grid.innerHTML=recGridHTML(cl,actual,diff); }
   else{ panel.className='rec-panel bad'; title.innerHTML=`🔴 ยอดต่างกัน <span class="mono"> ${fmt2(Math.abs(diff))} บาท</span> — ${diff<0?'เงินขาด ต้องตรวจสอบ':'เงินเกิน ตรวจสอบรายการ'}`; grid.innerHTML=recGridHTML(cl,actual,diff); }
   // ── สรุปวงเงินก้อนก่อนหน้า ──
-  const prevWr=withdrawRequests.filter(w=>w.status==='approved'&&w.closing_before!=null);
-  const prevBox=document.getElementById('prevPeriodSummary');
-  const prevDetail=document.getElementById('prevPeriodDetail');
-  if(prevWr.length&&prevBox&&prevDetail){
-    prevBox.style.display='';
-    let ph='';
-    prevWr.forEach((w,idx)=>{
-      const openBal=parseFloat(currentPeriod?.open_bal)||0;
-      const prevBook=parseFloat(w.closing_before)||0;
-      const prevExpAmt=openBal-prevBook;
-      const deficit=Math.abs(Math.min(prevBook,0));
-      ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem;border:1px solid #dbeafe">
-        <div style="font-weight:600;font-size:13px;margin-bottom:.5rem;color:#1e40af">💰 วงเงินก้อนที่ ${idx+1} (ปิดแล้ว)</div>
-        <div style="display:flex;flex-direction:column;gap:.3rem;font-size:13px">
-          <div style="display:flex;justify-content:space-between"><span>เงินต้น</span><span class="mono">${fmt2(openBal)} บาท</span></div>
-          <div style="display:flex;justify-content:space-between"><span>ค่าใช้จ่ายทั้งหมด</span><span class="mono" style="color:var(--red)">− ${fmt2(prevExpAmt)} บาท</span></div>
-          <div style="border-top:1px solid #bfdbfe;margin:.25rem 0"></div>
-          <div style="display:flex;justify-content:space-between;font-weight:700"><span>เงินคงเหลือ</span><span class="mono" style="color:${prevBook<0?'var(--red)':'var(--green)'}">${prevBook<0?`ติดลบ ${fmt2(deficit)} บาท`:`${fmt2(prevBook)} บาท`}</span></div>
-          ${deficit>0?`<div style="font-size:11.5px;color:var(--muted);margin-top:.2rem">⚠️ เงินเกินบัญชี ${fmt2(deficit)} บาท — ถูกนำไปหักออกจากวงเงินใหม่แล้ว</div>`:''}
-        </div>
-      </div>`;
-    });
-    prevDetail.innerHTML=ph;
-  } else if(prevBox){ prevBox.style.display='none'; }
   // ── ประวัติการนับเงิน ──
   let h='';
   if(!countRecords.length) h=`<div class="empty">ยังไม่มีประวัติการนับเงิน</div>`;
@@ -1434,6 +1410,30 @@ function renderCountHistory(){
   });
   h+=`</tbody></table>`;
   document.getElementById('countHistory').innerHTML=h;
+  const prevWr=withdrawRequests.filter(w=>w.status==='approved'&&w.closing_before!=null);
+  const prevBox=document.getElementById('prevPeriodSummary');
+  const prevDetail=document.getElementById('prevPeriodDetail');
+  if(prevWr.length&&prevBox&&prevDetail){
+    prevBox.style.display='';
+    let ph='';
+    prevWr.forEach((w,idx)=>{
+      const openBal=parseFloat(currentPeriod?.open_bal)||0;
+      const prevBook=parseFloat(w.closing_before)||0;
+      const prevExpAmt=openBal-prevBook;
+      const deficit=Math.abs(Math.min(prevBook,0));
+      ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem;border:1px solid #dbeafe">
+        <div style="font-weight:600;font-size:13px;margin-bottom:.5rem;color:#1e40af">💰 วงเงินก้อนที่ ${idx+1} (ปิดแล้ว)</div>
+        <div style="display:flex;flex-direction:column;gap:.3rem;font-size:13px">
+          <div style="display:flex;justify-content:space-between"><span>เงินต้น</span><span class="mono">${fmt2(openBal)} บาท</span></div>
+          <div style="display:flex;justify-content:space-between"><span>ค่าใช้จ่ายทั้งหมด</span><span class="mono" style="color:var(--red)">− ${fmt2(prevExpAmt)} บาท</span></div>
+          <div style="border-top:1px solid #bfdbfe;margin:.25rem 0"></div>
+          <div style="display:flex;justify-content:space-between;font-weight:700"><span>เงินคงเหลือ</span><span class="mono" style="color:${prevBook<0?'var(--red)':'var(--green)'}">${prevBook<0?`ติดลบ ${fmt2(deficit)} บาท`:`${fmt2(prevBook)} บาท`}</span></div>
+          ${deficit>0?`<div style="font-size:11.5px;color:var(--muted);margin-top:.2rem">⚠️ เงินเกินบัญชี ${fmt2(deficit)} บาท — ถูกนำไปหักออกจากวงเงินใหม่แล้ว</div>`:''}
+        </div>
+      </div>`;
+    });
+    prevDetail.innerHTML=ph;
+  } else if(prevBox){ prevBox.style.display='none'; }
 }
 
 // ── Delete Count Modal helpers ──
