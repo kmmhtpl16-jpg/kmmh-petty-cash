@@ -1127,9 +1127,8 @@ async function addAudit(action, description){
 // ══════════════════════════════════════════════
 function totalInc(){ return transactions.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0); }
 function totalExp(){ return transactions.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0); }
-function totalReturn(){ return transactions.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount),0); }
 function lastTxDate(){ return [...transactions].map(t=>t.tx_date).sort().at(-1)||todayStr(); }
-function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-(totalExp()-totalReturn()); }
+function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-totalExp(); }
 
 function lockCutoff(){
   // ถ้า period ถูกล็อกแล้ว ทุก tx ถูกล็อก
@@ -1298,7 +1297,7 @@ function renderCards(){
     <div class="card"><div class="card-lbl">รายจ่ายรวม</div><div class="card-val red mono">${fmt(totalExp())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='expense').length} รายการ</div></div>
     <div class="card"><div class="card-lbl">ยอดตามบัญชี</div><div class="card-val ${cl<0?'red':cl<500?'amber':''} mono">${fmt(cl)}</div><div class="card-sub">บาท</div></div>
     <div class="card"><div class="card-lbl">นับจริงได้</div><div class="card-val ${diff===null?'':diff<0?'red':diff===0?'green':'amber'} mono">${actualCash!==''?fmt(actual):'—'}</div><div class="card-sub">${diff===null?'ยังไม่ได้นับ':diff===0?'✅ ตรง':diff>0?`+${fmt(diff)} เกิน`:`${fmt(diff)} ขาด`}</div></div>
-    <div class="card"><div class="card-lbl">คืนเงินสดย่อย</div><div class="card-val num-red mono">${fmt2(totalReturn())}</div><div class="card-sub">บาท</div></div>
+    <div class="card"><div class="card-lbl">คืนเงินสดย่อย</div><div class="card-val num-red mono">${fmt2(transactions.filter(t=>t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount),0))}</div><div class="card-sub">บาท</div></div>
   `;
 }
 
@@ -1353,7 +1352,7 @@ function renderTable(){
 function renderSummary(){
   const exp=totalExp();
   const map={};
-  transactions.filter(t=>t.tx_type==='expense'&&t.acc_code!=='1111-10').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
   const sorted=Object.entries(map).sort((a,b)=>b[1]-a[1]);
   let h='';
   if(!sorted.length) h=`<div class="empty">ยังไม่มีรายการรายจ่าย</div>`;
@@ -1368,7 +1367,6 @@ function renderSummary(){
     <div class="stmt-row"><span>ยอดยกมาต้นเดือน</span><span class="mono">${fmt2(parseFloat(currentPeriod?.open_bal)||0)} บาท</span></div>
     <div class="stmt-row"><span>รับเงินเพิ่มระหว่างเดือน</span><span class="num-green">+ ${fmt2(totalInc())} บาท</span></div>
     <div class="stmt-row"><span>จ่ายออกระหว่างเดือน</span><span class="num-red">- ${fmt2(exp)} บาท
-    <div class="stmt-row"><span>คืนเงินสดย่อย</span><span class="num-green">+ ${fmt2(totalReturn())} บาท</span></div>
     <div class="stmt-total"><span>ยอดคงเหลือปลายเดือน</span><span class="mono" style="color:${cl<0?'#f9a8a8':'#f0ece0'}">${fmt2(cl)} บาท</span></div>`;
 }
 
