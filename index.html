@@ -10,10 +10,11 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#f5f3ee;--white:#fff;--dark:#1a1a1a;
-  --border:#e4e0d8;--border2:#ccc9c0;h
+  --border:#e4e0d8;--border2:#ccc9c0;hh
   --red:#c0392b;--red-bg:#fde8e8;--red-border:#f5b7b1;
   --green:#1e8449;--green-bg:#e8f5ee;--green-border:#a9dfbf;
   --amber:#b7770d;--amber-bg:#fef9e7;--amber-border:#f0c040;
+  --orange:#e07b39;
   --blue:#1a6bb5;--blue-bg:#eaf3fb;--blue-border:#aed6f1;
   --muted:#888;--muted2:#bbb;
   --radius:10px;--shadow:0 2px 14px rgba(0,0,0,.08);
@@ -156,8 +157,8 @@ tbody tr:hover td{background:#fafaf7}
 .sum-head{background:#f5f3ee;padding:9px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .sum-row{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:.5px solid #f0ede6;font-size:13px;gap:8px}
 .sum-row:last-child{border-bottom:none}
-.bar-bg{flex:1;height:8px;background:#ddd8ce;border-radius:4px;min-width:30px}
-.bar-fill{height:8px;background:var(--red);border-radius:4px}
+.bar-bg{flex:1;height:10px;background:#e0dbd0;border-radius:4px;min-width:30px}
+.bar-fill{height:10px;background:var(--orange);border-radius:4px}
 .sum-amt{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--red);min-width:90px;text-align:right;flex-shrink:0}
 .sum-total{background:#f5f3ee;display:flex;justify-content:space-between;padding:10px 14px;font-weight:700;border-top:1px solid var(--border)}
 .stmt-row{display:flex;justify-content:space-between;padding:9px 14px;border-bottom:.5px solid #f0ede6;font-size:13px}
@@ -469,10 +470,7 @@ tbody tr:hover td{background:#fafaf7}
     <p style="font-size:12.5px;color:#666;line-height:1.6;margin-bottom:.75rem">กรอกยอดเงินที่นับจริงในช่อง <strong>"นับเงินจริงได้"</strong> ด้านบน ระบบเปรียบเทียบให้อัตโนมัติ</p>
     <div class="rec-grid" id="recGrid"></div>
   </div>
-  <div class="sum-box">
-    <div class="sum-head">ประวัติการนับเงิน (จาก Supabase)</div>
-    <div id="chkHistory"></div>
-  </div>
+  <button class="btn btn-amber no-print" onclick="openCloseMonthModal()" style="margin:.5rem 0;display:block">🔒 ปิดวงเงินก้อนนี1</button>
 </div>
 
 <!-- ─── VIEW: AUDIT ─── -->
@@ -1247,7 +1245,7 @@ function renderAlerts(){
   let h='';
   if(transactions.some(e=>e.acc_code&&e.acc_code.includes('5277-80')))
     h+=`<div class="alert alert-warn">⚠️ <span>มีรายการ <strong>"ค่าใช้จ่าย - ที่หายไป (5277-80)"</strong> ในเดือนนี้ — ควรตรวจสอบรหัสบัญชีให้ถูกต้อง</span></div>`;
-  if(withRunning().some(e=>e.runBal<-50))
+  if(closing() < -50)
     h+=`<div class="alert alert-warn">🟡 <span>ยอดเงินสดย่อยติดลบชั่วคราว — รอเติมเงินเข้าระบบ (บันทึกรายการได้ตามปกติ)</span></div>`;
   const actual=parseFloat(actualCash), book=closing();
   if(!isNaN(actual)&&actualCash!==''){
@@ -1355,23 +1353,6 @@ function renderReconcile(){
   else if(Math.abs(diff)<0.005){ panel.className='rec-panel ok'; title.textContent='✅ ยอดตรง — เงินสดย่อยถูกต้อง'; grid.innerHTML=recGridHTML(cl,actual,diff); }
   else{ panel.className='rec-panel bad'; title.innerHTML=`🔴 ยอดต่างกัน <span class="mono"> ${fmt2(Math.abs(diff))} บาท</span> — ${diff<0?'เงินขาด ต้องตรวจสอบ':'เงินเกิน ตรวจสอบรายการ'}`; grid.innerHTML=recGridHTML(cl,actual,diff); }
   // ── สรุปวงเงินก้อนก่อนหน้า ──
-  // ── ประวัติการนับเงิน ──
-  let h='';
-  if(!countRecords.length) h=`<div class="empty">ยังไม่มีประวัติการนับเงิน</div>`;
-  const canDel=(currentRole==='auditor'||currentRole==='manager');
-  [...countRecords].forEach(c=>{
-    const d=parseFloat(c.diff||0);
-            const dt=c.count_date?fmtDate(c.count_date):'-';
-    h+=`<div class="sum-row" style="align-items:center">
-      <div style="font-size:12px;min-width:120px">${dt}</div>
-      <div style="font-size:12px;color:var(--muted);flex:1">บัญชี ${fmt2(c.bal_book)} บาท</div>
-      <div style="font-size:12px;color:var(--muted)">จริง ${fmt2(c.bal_real)} บาท</div>
-      <div style="margin-left:8px"><span class="badge ${Math.abs(d)<0.005?'badge-inc':'badge-exp'}">${Math.abs(d)<0.005?'ตรง ✅':d>0?`เกิน +${fmt2(d)}`:`ขาด ${fmt2(Math.abs(d))}`}</span></div>
-      ${canDel?`<button onclick="openDeleteCountModal('${c.id}','${fmt2(c.bal_real)}')" style="margin-left:8px;background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer">🗑 ลบ</button>`:''}
-    </div>`;
-    if(c.note) h+=`<div style="padding:2px 14px 6px;font-size:11px;color:var(--muted)">💬 ${c.note}</div>`;
-  });
-  document.getElementById('chkHistory').innerHTML=h;
 }
 function recGridHTML(book,actual,diff){
   return`<div class="rec-lbl">ยอดตามบัญชี</div><div class="rec-val">${fmt2(book)} บาท</div>
