@@ -733,6 +733,10 @@ tbody tr:hover td{background:#fafaf7}
     <label>หมายเหตุ (กรณียอดไม่ตรง ต้องอธิบาย)</label>
     <textarea id="cmNote" placeholder="อธิบายสาเหตุที่ยอดต่างกัน..."></textarea>
   </div>
+  <div id="reserveRow" style="display:none;margin-bottom:8px">
+    <label style="font-size:12px;color:#b7770d;font-weight:600">❗ ยอดเบิกสำรอง (บาท) — ต้อง ≥ <span id="reserveMin"></span></label>
+    <input type="number" id="reserveInput" min="0" step="0.01" style="width:100%;border:1px solid #b7770d;border-radius:6px;padding:6px 10px;margin-top:4px" oninput="previewCloseMonth()">
+  </div>
   <div class="mgr-pin-wrap">
     <label>🔑 รหัสผู้จัดการ (Manager PIN) — จำเป็น</label>
     <input type="password" id="cmMgrPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCmMgrPin()" autocomplete="off">
@@ -2196,6 +2200,7 @@ function openCloseMonthModal(){
   const btn=document.getElementById('btnSaveCloseMonth');
   btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
   previewCloseMonth();
+  document.getElementById('reserveRow').style.display='none';
   openModal('closeMonthModal');
   setTimeout(()=>document.getElementById('cmActual').focus(),200);
 }
@@ -2245,45 +2250,56 @@ async function confirmCloseMonth(){
   const actual=parseFloat(document.getElementById('cmActual').value);
   const note=document.getElementById('cmNote').value;
   const book=closing();
-  if(isNaN(actual)){ showToast('กรุณากรอกยอดที่นับจริง','error'); return; }
-  if(Math.abs(actual-book)>0.005&&!note.trim()){ showToast('ยอดไม่ตรง — กรุณาระบุหมายเหตุ','error'); return; }
-  showLoading(true,'กำลังปิดยอด...');
+  if(isNaN(actual)){showToast('กรอกยอดนับจริง','error');return;}
+  if(Math.abs(actual-book)>0.005&&!note.trim()){showToast('ยอดไม่ตรง — กรอกหมายเหตุไว้ด้วย','error');return;}
+  const cl=closing();
+  if(cl<-0.005){
+    const rRow=document.getElementById('reserveRow');
+    const rMin=document.getElementById('reserveMin');
+    if(rRow.style.display==='none'){
+      rMin.textContent=fmt2(Math.abs(cl));
+      rRow.style.display='';
+      document.getElementById('reserveInput').value='';
+      document.getElementById('reserveInput').focus();
+      return;
+    }
+    const reserveAmt=parseFloat(document.getElementById('reserveInput').value);
+    if(isNaN(reserveAmt)||reserveAmt<Math.abs(cl)-0.005){
+      showToast('ยอดเบิกสำรองต้องไม่น้อยกว่า '+fmt2(Math.abs(cl))+' บาท','error');return;
+    }
+    showLoading(true,'ปิดวงเงิน...');
+    try{
+      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'income',acc_code:'1111-30',amount:reserveAmt,description:'เบิกสำรองเพิ่ม (auto)',status:'approved',created_by:currentUser?.name||currentRole});
+      const retAmt=parseFloat((reserveAmt-Math.abs(cl)).toFixed(2));
+      if(retAmt>0.005){await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:retAmt,description:'คืนเงินสดย่อย (auto)',status:'approved',created_by:currentUser?.name||currentRole});}
+      await loadTransactions();
+    }catch(e){showLoading(false);showToast('ผิดพลาด: '+e.message,'error');return;}
+  } else if(cl>0.005){
+    showLoading(true,'ปิดวงเงิน...');
+    try{
+      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:cl,description:'คืนเงินสดย่อย (auto)',status:'approved',created_by:currentUser?.name||currentRole});
+      await loadTransactions();
+    }catch(e){showLoading(false);showToast('ผิดพลาด: '+e.message,'error');return;}
+  } else {
+    showLoading(true,'ปิดวงเงิน...');
+  }
   try{
-    // บันทึก count record
-    await sb.from('petty_cash_counts').insert({
-      period_id:currentPeriod.id,
-      bal_book:book,
-      bal_real:actual,
-      diff:actual-book,
-      note,
-      by_role:currentRole,
-      by_name:currentUser?.name||currentRole
-    });
-    // ล็อก period
-    await sb.from('petty_cash_periods').update({
-      is_locked:true,
-      locked_at:lastTxDate()+'T00:00:00.000Z',
-      final_bal:actual
-    }).eq('id',currentPeriod.id);
+    const book2=closing();
+    await sb.from('petty_cash_counts').insert({period_id:currentPeriod.id,bal_book:book2,bal_real:actual,diff:actual-book2,note,by_role:currentRole,by_name:currentUser?.name||currentRole});
+    await sb.from('petty_cash_periods').update({is_locked:true,locked_at:lastTxDate()+'T00:00:00.000Z',final_bal:actual}).eq('id',currentPeriod.id);
     currentPeriod.is_locked=true;
-    await addAudit('lock',
-      `ปิดยอดเดือน ${monthLabel()} | ยอดบัญชี: ${fmt2(book)} บาท | นับจริง: ${fmt2(actual)} บาท | ต่าง: ${fmt2(actual-book)} บาท | `+
-      `ผู้อนุมัติ: ${document.getElementById('btnSaveCloseMonth').textContent.replace('✅ ยืนยัน (','').replace(')','') || 'Manager'} | `+
-      `ผู้ดำเนินการ: ${currentUser?.name||currentRole} (${currentRole})`
-    );
+    await addAudit('lock',`ปดวงเดือน ${monthLabel()} | ยอดคงเหลือ: ${fmt2(book2)} | นับ: ${fmt2(actual)} | ต่าง: ${fmt2(actual-book2)}`);
     actualCash=String(actual);
     await loadCounts();
+    const rRow2=document.getElementById('reserveRow');
+    if(rRow2) rRow2.style.display='none';
     closeModal('closeMonthModal');
     render();
     autoBackup();
-    showToast(`ปิดยอดเดือน ${monthLabel()} เรียบร้อย ✅`,'success');
-  }catch(e){ showToast('ปิดยอดล้มเหลว: '+e.message,'error'); }
+    showToast(`✅ ${monthLabel()} ปิดวงเงินแล้ว`,'success');
+  }catch(e){showToast('ผดพลาด: '+e.message,'error');}
   showLoading(false);
 }
-
-// ══════════════════════════════════════════════
-// EXPORT — CSV (UTF-8 BOM, เปิดใน Excel ได้)
-// ══════════════════════════════════════════════
 function exportCSV(){
   const rows=withRunning();
   const BOM='\uFEFF';
