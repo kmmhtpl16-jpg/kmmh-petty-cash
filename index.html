@@ -2266,52 +2266,104 @@ async function confirmCloseMonth(){
   const note=document.getElementById('cmNote').value;
   const book=closing();
   if(isNaN(actual)){showToast('กรอกยอดนับจริง','error');return;}
-  if(Math.abs(actual-book)>0.005&&!note.trim()){showToast('ยอดไม่ตรง — กรอกหมายเหตุไว้ด้วย','error');return;}
-  const cl=closing();
-  if(cl<-0.005){
+  if(Math.abs(actual-book)>0.005&&!note.trim()){showToast('ยอดไม่ตรง → กรอกหมายเหตุด้วย','error');return;}
+  const cl=book;
+
+  // ─── STEP 1: ตรวจหนี้ข้ามก้อน ───
+  let debtFromPrev=0;
+  try{
+    const prevNo=(currentPeriod.period_no||1)-1;
+    if(prevNo>=1){
+      const{data:prevPeriods}=await sb.from('petty_cash_periods')
+        .select('id').eq('period_no',prevNo).limit(1);
+      if(prevPeriods&&prevPeriods.length>0){
+        const prevPId=prevPeriods[0].id;
+        const{data:prevReserve}=await sb.from('petty_cash_transactions')
+          .select('amount')
+          .eq('period_id',prevPId)
+          .eq('tx_type','income')
+          .eq('acc_code','1111-30');
+        debtFromPrev=(prevReserve||[]).reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
+      }
+    }
+  }catch(e){showToast('ดึงข้อมูลก้อนก่อนไม่ได้: '+e.message,'error');return;}
+
+  if(debtFromPrev>0.005){
+    const y=(20000-debtFromPrev).toFixed(2);
+    const ok=confirm(
+      'ก้อนนี้มีหนี้ค้างจากก้อนก่อน '+fmt2(debtFromPrev)+' บาท\n'+
+      'ระบบจะหักออกจากวงเงินอัตโนมัติ\n'+
+      'เงินที่ใช้ได้จริง = 20,000 − '+fmt2(debtFromPrev)+' = '+y+' บาท\n'+
+      'กดยืนยันเพื่อดำเนินการต่อ'
+    );
+    if(!ok)return;
+    showLoading(true,'ส่งคืนหนี้ก้อนก่อน...');
+    try{
+      await sb.from('petty_cash_transactions').insert({
+        period_id:currentPeriod.id,
+        tx_date:lastTxDate(),
+        tx_type:'expense',
+        acc_code:'1111-10',
+        amount:debtFromPrev,
+        description:'ส่งคืนหนี้ก้อนก่อน',
+        by_role:currentRole,
+        by_name:currentUser?.name||currentRole
+      });
+      await loadTransactions();
+    }catch(e){showLoading(false);showToast('บันทึกไม่ได้: '+e.message,'error');return;}
+    showLoading(false);
+  }
+
+  // ─── STEP 2: คำนวณ closing ใหม่ (หลัง INSERT หนี้เรียบร้อยแล้ว) ───
+  const cl2=closing();
+
+  // ─── STEP 3: แยก 2 เส้นทาง ───
+  if(cl2<-0.005){
+    // closing < 0 → ต้องเบิกเงินสำรอง
     const rRow=document.getElementById('reserveRow');
     const rMin=document.getElementById('reserveMin');
     if(rRow.style.display==='none'){
-      rMin.textContent=fmt2(Math.abs(cl));
-      rRow.style.display='';
+      rMin.textContent=fmt2(Math.abs(cl2));
+      rRow.style.display='block';
       document.getElementById('reserveInput').value='';
       document.getElementById('reserveInput').focus();
       return;
     }
     const reserveAmt=parseFloat(document.getElementById('reserveInput').value);
-    if(isNaN(reserveAmt)||reserveAmt<Math.abs(cl)-0.005){
-      showToast('ยอดเบิกสำรองต้องไม่น้อยกว่า '+fmt2(Math.abs(cl))+' บาท','error');return;
+    if(isNaN(reserveAmt)||reserveAmt<Math.abs(cl2)-0.005){
+      showToast('ยอดเบิกสำรองต้องไม่น้อยกว่า '+fmt2(Math.abs(cl2))+' บาท','error');
+      return;
     }
-    showLoading(true,'ปิดวงเงิน...');
+    showLoading(true,'ปิดงวด...');
     try{
       await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'income',acc_code:'1111-30',amount:reserveAmt,description:'เบิกเงินสำรอง (auto)',by_role:currentRole,by_name:currentUser?.name||currentRole});
       await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:actual,description:'คืนเงินสดย่อย (auto)',by_role:currentRole,by_name:currentUser?.name||currentRole});
       await loadTransactions();
-    }catch(e){showLoading(false);showToast('ผิดพลาด: '+e.message,'error');return;}
-  } else if(cl>0.005){
-    showLoading(true,'ปิดวงเงิน...');
+    }catch(e){showLoading(false);showToast('บันทึกไม่ได้: '+e.message,'error');return;}
+  } else {
+    // closing >= 0 → คืนเงินปกติ
+    showLoading(true,'ปิดงวด...');
     try{
       await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:actual,description:'คืนเงินสดย่อย (auto)',by_role:currentRole,by_name:currentUser?.name||currentRole});
       await loadTransactions();
-    }catch(e){showLoading(false);showToast('ผิดพลาด: '+e.message,'error');return;}
-  } else {
-    showLoading(true,'ปิดวงเงิน...');
+    }catch(e){showLoading(false);showToast('บันทึกไม่ได้: '+e.message,'error');return;}
   }
+
+  // ─── ล็อก period ───
   try{
     const book2=closing();
     await sb.from('petty_cash_counts').insert({period_id:currentPeriod.id,bal_book:book2,bal_real:actual,diff:actual-book2,note,by_role:currentRole,by_name:currentUser?.name||currentRole});
     await sb.from('petty_cash_periods').update({is_locked:true,locked_at:lastTxDate()+'T00:00:00.000Z',final_bal:actual}).eq('id',currentPeriod.id);
     currentPeriod.is_locked=true;
-    await addAudit('lock',`ปิดวงเดือน ${monthLabel()} | ยอดคงเหลือ: ${fmt2(book2)} | นับ: ${fmt2(actual)} | ต่าง: ${fmt2(actual-book2)}`);
+    await addAudit('lock',`ปิดงวด ${monthLabel()} | ยอดตามบัญชี: ${fmt2(book2)} | นับ: ${fmt2(actual)} | ต่าง: ${fmt2(actual-book2)}`);
     actualCash=String(actual);
     await loadCounts();
-    const rRow2=document.getElementById('reserveRow');
-    if(rRow2) rRow2.style.display='none';
+    if(document.getElementById('reserveRow')) document.getElementById('reserveRow').style.display='none';
     closeModal('closeMonthModal');
     render();
     autoBackup();
-    showToast(`✅ ${monthLabel()} ปิดวงเงินแล้ว`,'success');
-  }catch(e){showToast('ผิดพลาด: '+e.message,'error');}
+    showToast(`✓ ${monthLabel()} ปิดงวดเรียบร้อย`,'success');
+  }catch(e){showToast('บันทึกไม่ได้: '+e.message,'error');}
   showLoading(false);
 }
 function exportCSV(){
