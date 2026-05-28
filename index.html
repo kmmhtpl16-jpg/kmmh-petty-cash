@@ -2269,15 +2269,14 @@ async function confirmCloseMonth(){
     }
     showLoading(true,'ปิดวงเงิน...');
     try{
-      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'income',acc_code:'1111-30',amount:reserveAmt,description:'เบิกสำรองเพิ่ม (auto)',status:'approved',created_by:currentUser?.name||currentRole});
-      const retAmt=parseFloat((reserveAmt-Math.abs(cl)).toFixed(2));
-      if(retAmt>0.005){await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:retAmt,description:'คืนเงินสดย่อย (auto)',status:'approved',created_by:currentUser?.name||currentRole});}
+      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'income',acc_code:'1111-30',amount:reserveAmt,description:'เบิกเงินสำรอง (auto)',by_role:currentRole,by_name:currentUser?.name||currentRole});
+      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:actual,description:'คืนเงินสดย่อย (auto)',by_role:currentRole,by_name:currentUser?.name||currentRole});
       await loadTransactions();
     }catch(e){showLoading(false);showToast('ผิดพลาด: '+e.message,'error');return;}
   } else if(cl>0.005){
     showLoading(true,'ปิดวงเงิน...');
     try{
-      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:cl,description:'คืนเงินสดย่อย (auto)',status:'approved',created_by:currentUser?.name||currentRole});
+      await sb.from('petty_cash_transactions').insert({period_id:currentPeriod.id,tx_date:lastTxDate(),tx_type:'expense',acc_code:'1111-10',amount:actual,description:'คืนเงินสดย่อย (auto)',by_role:currentRole,by_name:currentUser?.name||currentRole});
       await loadTransactions();
     }catch(e){showLoading(false);showToast('ผิดพลาด: '+e.message,'error');return;}
   } else {
@@ -2288,7 +2287,7 @@ async function confirmCloseMonth(){
     await sb.from('petty_cash_counts').insert({period_id:currentPeriod.id,bal_book:book2,bal_real:actual,diff:actual-book2,note,by_role:currentRole,by_name:currentUser?.name||currentRole});
     await sb.from('petty_cash_periods').update({is_locked:true,locked_at:lastTxDate()+'T00:00:00.000Z',final_bal:actual}).eq('id',currentPeriod.id);
     currentPeriod.is_locked=true;
-    await addAudit('lock',`ปดวงเดือน ${monthLabel()} | ยอดคงเหลือ: ${fmt2(book2)} | นับ: ${fmt2(actual)} | ต่าง: ${fmt2(actual-book2)}`);
+    await addAudit('lock',`ปิดวงเดือน ${monthLabel()} | ยอดคงเหลือ: ${fmt2(book2)} | นับ: ${fmt2(actual)} | ต่าง: ${fmt2(actual-book2)}`);
     actualCash=String(actual);
     await loadCounts();
     const rRow2=document.getElementById('reserveRow');
@@ -2297,7 +2296,7 @@ async function confirmCloseMonth(){
     render();
     autoBackup();
     showToast(`✅ ${monthLabel()} ปิดวงเงินแล้ว`,'success');
-  }catch(e){showToast('ผดพลาด: '+e.message,'error');}
+  }catch(e){showToast('ผิดพลาด: '+e.message,'error');}
   showLoading(false);
 }
 function exportCSV(){
