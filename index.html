@@ -1466,9 +1466,11 @@ const inc1111=transactions.filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30
 if(!inc1111.length){ prevBox.style.display='none'; return; }
 prevBox.style.display='';
 const allSorted=[...transactions].sort((a,b)=>a.tx_date.localeCompare(b.tx_date)||(a.created_at||'').localeCompare(b.created_at||''));
+// กรอง tx ที่มี description ประกอบคำ 'หนี้' ออก (=หนี้ข้ามก้อน ไม่ใช่รายจ่ายจริงของแต่ละก้อน)
+const isKonDebt=(t)=>(t.description||'').includes('หนี้');
 const getKon=(i)=>{
-if(i===0) return allSorted.filter(t=>t.tx_date<=inc1111[0].tx_date);
-return allSorted.filter(t=>t.tx_date>inc1111[i-1].tx_date&&t.tx_date<=inc1111[i].tx_date);
+if(i===0) return allSorted.filter(t=>t.tx_date<=inc1111[0].tx_date&&!isKonDebt(t));
+return allSorted.filter(t=>t.tx_date>inc1111[i-1].tx_date&&t.tx_date<=inc1111[i].tx_date&&!isKonDebt(t));
 };
 const openBal0=parseFloat(currentPeriod?.open_bal)||0;
 let ph='';
@@ -1485,6 +1487,7 @@ ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin
 }
 prevDetail.innerHTML=ph;
 }
+
 // ── Delete Count Modal helpers ──
 let _deleteCountId=null;
 function openDeleteCountModal(id,realAmt){
