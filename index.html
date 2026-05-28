@@ -2282,7 +2282,8 @@ async function confirmCloseMonth(){
           .select('amount')
           .eq('period_id',prevPId)
           .eq('tx_type','income')
-          .eq('acc_code','1111-30');
+          .eq('acc_code','1111-30')
+          .ilike('description','%สำรอง%');
         debtFromPrev=(prevReserve||[]).reduce((s,r)=>s+(parseFloat(r.amount)||0),0);
       }
     }
