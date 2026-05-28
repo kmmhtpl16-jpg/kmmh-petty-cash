@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>KMMH — ระบบเงินสดย่อย v4</title>
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icon.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -799,6 +801,27 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 </div>
 
+<!-- ─── COUNT PIN MODAL ─── -->
+<div class="modal-bg" id="countPinModal">
+<div class="modal">
+<h2>🔢 ยืนยัน PIN ก่อนบันทึกการนับเงิน</h2>
+<div id="cpInfo" style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.9"></div>
+<div id="cpNoteField" style="display:none;margin-bottom:.75rem">
+<label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">หมายเหตุ (ยอดไม่ตรง) <span style="color:var(--red)">*</span></label>
+<textarea id="cpNote" placeholder="อธิบายสาเหตุ..." style="width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:8px 11px;font-family:'Sarabun',sans-serif;font-size:13px;color:var(--dark);outline:none;resize:vertical;height:56px" oninput="checkCountPinReady()"></textarea>
+</div>
+<div class="mgr-pin-wrap">
+<label>🔑 PIN ผู้จัดการ หรือ ผู้ตรวจสอบ — จำเป็น</label>
+<input type="password" id="cpPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCountPin()" autocomplete="off">
+<div class="mgr-pin-status" id="cpPinStatus"></div>
+</div>
+<div class="modal-btns">
+<button class="btn-cancel-sm" onclick="closeModal('countPinModal')">ยกเลิก</button>
+<button class="btn btn-dark btn-save" id="btnConfirmCountPin" onclick="confirmSaveCount()" disabled style="opacity:.4;cursor:not-allowed">✅ ยืนยันและบันทึก</button>
+</div>
+</div>
+</div>
+
 <!-- ─── LIGHTBOX ─── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightboxImg" src="" alt="receipt">
@@ -1508,33 +1531,72 @@ function clearCount(){
 let _pendingCount = null;
 
 async function saveCountRecord(){
-  const total=Array.from(document.querySelectorAll('.denom-input')).reduce((s,i)=>s+(parseInt(i.value)||0)*parseInt(i.dataset.val),0);
-  if(total===0&&!confirm('ยอดที่นับเป็น 0 บาท ยืนยันบันทึก?')) return;
-  const book=closing();
-  const diff=total-book;
-  let note='';
-  if(Math.abs(diff)>0.005){
-    const n=prompt(`ยอดต่างกัน ${fmt2(Math.abs(diff))} บาท\nกรุณาระบุสาเหตุ:`,'');
-    if(n===null) return;
-    note=n||'(ไม่ระบุ)';
-  }
-  // เก็บไว้รอ auditor ยืนยัน
-  const countDate=document.getElementById('countDateInput')?.value||null;
-    _pendingCount={book,total,diff,note,count_date:countDate};
-  // เปิด popup ถามเงินส่งคืนก่อน
-  document.getElementById('returnCashCountedAmt').textContent=fmt2(total);
-  // ถ้าวงเงินติดลบ ให้ auto-fill เงินคืน = เงินที่นับจริงได้ทั้งหมด
-    if(book<0&&total>0){
-          document.getElementById('returnCashAmt').value=total;
-          previewReturnCash();
-    } else {
-          document.getElementById('returnCashAmt').value='';
-          document.getElementById('returnCashPreview').textContent='';
-    }
-  openModal('returnCashModal');
-  setTimeout(()=>document.getElementById('returnCashAmt').focus(),200);
+const total=Array.from(document.querySelectorAll('.denom-input')).reduce((s,i)=>s+(parseInt(i.value)||0)*parseInt(i.dataset.val),0);
+if(total===0&&!confirm('ยอดที่นับเป็น 0 บาท ยืนยันบันทึก?')) return;
+const book=closing();
+const diff=total-book;
+const countDate=document.getElementById('countDateInput')?.value||null;
+_pendingCount={book,total,diff,note:'',count_date:countDate};
+const diffTxt=Math.abs(diff)<0.005?'<span style="color:var(--green)">✅ ยอดตรง</span>':`<span style="color:var(--red)">⚠️ ต่างกัน ${fmt2(Math.abs(diff))} บาท (${diff>0?'เกิน':'ขาด'})</span>`;
+document.getElementById('cpInfo').innerHTML=`<b>ยอดตามบัญชี:</b> ${fmt2(book)} บาท<br><b>นับจริงได้:</b> ${fmt2(total)} บาท<br><b>ผลต่าง:</b> ${diffTxt}`;
+document.getElementById('cpNoteField').style.display=Math.abs(diff)>0.005?'block':'none';
+document.getElementById('cpNote').value='';
+document.getElementById('cpPin').value='';
+document.getElementById('cpPinStatus').textContent='';
+const btn=document.getElementById('btnConfirmCountPin');
+btn.disabled=true; btn.style.opacity='.4'; btn._confirmedName=''; btn._confirmedRole='';
+openModal('countPinModal');
+setTimeout(()=>document.getElementById('cpPin').focus(),200);
 }
 
+async function checkCountPin(){
+const val=document.getElementById('cpPin').value;
+const status=document.getElementById('cpPinStatus');
+const btn=document.getElementById('btnConfirmCountPin');
+btn.disabled=true; btn.style.opacity='.4'; btn._confirmedName=''; btn._confirmedRole='';
+if(val.length<4){ status.textContent=''; return; }
+try{
+const {data}=await sb.from('petty_cash_users').select('id,name,role').eq('pin_value',val).in('role',['manager','auditor']).eq('is_active',true).maybeSingle();
+if(data){
+status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
+status.style.color='var(--green)';
+btn._confirmedName=data.name; btn._confirmedRole=data.role;
+checkCountPinReady();
+} else {
+status.textContent='❌ PIN ไม่ถูกต้อง (ต้องเป็น Manager หรือ Auditor)';
+status.style.color='var(--red)';
+}
+}catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
+}
+
+function checkCountPinReady(){
+const btn=document.getElementById('btnConfirmCountPin');
+const hasPIN=btn._confirmedName&&btn._confirmedName.length>0;
+const diff=_pendingCount?_pendingCount.diff:0;
+const needNote=Math.abs(diff)>0.005;
+const hasNote=document.getElementById('cpNote').value.trim().length>0;
+if(hasPIN&&(!needNote||hasNote)){ btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer'; }
+else { btn.disabled=true; btn.style.opacity='.4'; btn.style.cursor='not-allowed'; }
+}
+
+async function confirmSaveCount(){
+if(!_pendingCount) return;
+const btn=document.getElementById('btnConfirmCountPin');
+const noteVal=document.getElementById('cpNote').value.trim();
+if(Math.abs(_pendingCount.diff)>0.005&&!noteVal){ showToast('กรุณาระบุหมายเหตุ','error'); return; }
+_pendingCount.note=noteVal||'';
+closeModal('countPinModal');
+document.getElementById('returnCashCountedAmt').textContent=fmt2(_pendingCount.total);
+if(_pendingCount.book<0&&_pendingCount.total>0){
+document.getElementById('returnCashAmt').value=_pendingCount.total;
+previewReturnCash();
+} else {
+document.getElementById('returnCashAmt').value='';
+document.getElementById('returnCashPreview').textContent='';
+}
+openModal('returnCashModal');
+setTimeout(()=>document.getElementById('returnCashAmt').focus(),200);
+}
 function previewReturnCash(){
   const val=parseFloat(document.getElementById('returnCashAmt').value)||0;
   const counted=_pendingCount?_pendingCount.total:0;
@@ -2969,6 +3031,20 @@ async function sendDailySummary(){
   if(totalInc>0) msg+=`💵 รับเงินเข้า: <b>${totalInc.toLocaleString('th-TH')} บาท</b>\n`;
   msg+=`💸 รายจ่ายรวม: <b>${totalExp.toLocaleString('th-TH')} บาท</b>`;
 
+  try{
+  const todayMonth=today.substring(0,7);
+  const {data:prd}=await sb.from('petty_cash_periods').select('id,open_bal').eq('month_key',todayMonth).maybeSingle();
+  if(prd){
+  const {data:allTx}=await sb.from('petty_cash_transactions').select('tx_type,amount').eq('period_id',prd.id);
+  const pInc=(allTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
+  const pExp=(allTx||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0);
+  const balanceNow=(parseFloat(prd.open_bal)||0)+pInc-pExp;
+  msg+=`\n💰 ยอดเงินคงเหลือ: <b>${balanceNow.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})} บาท</b>`;
+  const {data:cnts}=await sb.from('petty_cash_counts').select('bal_real,by_name').eq('period_id',prd.id).eq('count_date',today).order('counted_at',{ascending:false}).limit(1);
+  if(cnts&&cnts.length){ const c=cnts[0]; msg+=`\n🔍 ยอดตรวจนับ: <b>${parseFloat(c.bal_real).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})} บาท</b>\n✅ ยืนยันโดย: <b>${c.by_name||'ไม่ระบุ'}</b>`; }
+  else { msg+=`\n🔍 ยอดตรวจนับ: <i>ยังไม่ได้นับวันนี้</i>`; }
+  }
+  }catch(e){ console.warn('Telegram balance error:',e); }
   await sendTelegram(msg);
   localStorage.setItem(todayKey,'1');
 }
