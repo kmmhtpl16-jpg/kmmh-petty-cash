@@ -463,6 +463,10 @@ tbody tr:hover td{background:#fafaf7}
     <div class="sum-head">งบสรุปเงินสดย่อยประจำเดือน</div>
     <div id="stmtRows"></div>
   </div>
+  <div class="sum-box">
+    <div class="sum-head">ประวัติงวดที่ปิดแล้ว</div>
+    <div id="closedPeriodHistory"></div>
+  </div>
 </div>
 
 <!-- ─── VIEW: RECONCILE ─── -->
@@ -1260,7 +1264,7 @@ function render(){
     pact.innerHTML=`<button class="btn btn-sm btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอดเดือนนี้</button>`;
   } else { pact.innerHTML=''; }
   renderAlerts(); renderCards(); renderDiff(); renderTable();
-  if(document.getElementById('view-summary').style.display!=='none') renderSummary();
+  if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
   if(document.getElementById('view-reconcile').style.display!=='none') renderReconcile();
   if(document.getElementById('view-audit').style.display!=='none') renderAudit();
   if(document.getElementById('view-count').style.display!=='none') renderCountHistory();
@@ -1368,6 +1372,29 @@ function renderSummary(){
     <div class="stmt-row"><span>รับเงินเพิ่มระหว่างเดือน</span><span class="num-green">+ ${fmt2(totalInc())} บาท</span></div>
     <div class="stmt-row"><span>จ่ายออกระหว่างเดือน</span><span class="num-red">- ${fmt2(exp)} บาท
     <div class="stmt-total"><span>ยอดคงเหลือปลายเดือน</span><span class="mono" style="color:${cl<0?'#f9a8a8':'#f0ece0'}">${fmt2(cl)} บาท</span></div>`;
+}
+
+async function renderClosedPeriods(){
+  const el=document.getElementById('closedPeriodHistory');
+  if(!el) return;
+  el.innerHTML='<p style="padding:14px;color:#888;font-size:13px">กำลังโหลด...</p>';
+  const{data:periods,error}=await sb.from('petty_cash_periods').select('*').eq('is_locked',true).order('period_no',{ascending:false});
+  if(error||!periods||!periods.length){
+    el.innerHTML='<p style="padding:14px;color:#888;font-size:13px">ยังไม่มีงวดที่ปิดแล้ว</p>';
+    return;
+  }
+  let html='';
+  for(const p of periods){
+    const{data:txs}=await sb.from('petty_cash_transactions').select('tx_type,acc_code,amount').eq('period_id',p.id);
+    const inc=(txs||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const exp=(txs||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const ret=(txs||[]).filter(t=>t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const[y,m]=(p.month_key||'').split('-');
+    const lbl=y&&m? MONTHS_TH[+m-1]+' '+(+y+543):p.month_key||'-';
+    const closedDate=p.locked_at? fmtDate(p.locked_at.substring(0,10)):'-';
+    html+=`<div class="stmt-row"><span style="font-weight:600">${lbl}</span><span class="mono" style="font-size:12px;color:#555">รับ ${fmt2(inc)} | จ่าย ${fmt2(exp)} | ทอน ${fmt2(ret)} | ปิด ${closedDate}</span></div>`;
+  }
+  el.innerHTML=html||'<p style="padding:14px;color:#888;font-size:13px">ยังไม่มีงวดที่ปิดแล้ว</p>';
 }
 
 function renderReconcile(){
