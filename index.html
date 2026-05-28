@@ -715,6 +715,7 @@ tbody tr:hover td{background:#fafaf7}
   <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#7a5500;margin-bottom:1rem;line-height:1.7">
     ⚠️ การปิดยอดจะ <strong>ล็อกรายการทั้งหมด</strong>ในเดือนนี้ และยอดคงเหลือจะถูกยกไปเป็นยอดเปิดเดือนถัดไปโดยอัตโนมัติ
   </div>
+  <p id="closeDateDisplay" style="font-size:12px;color:#888;margin-bottom:8px;font-style:italic"></p>
   <div class="field">
     <label>ยอดตามบัญชี (บาท)</label>
     <input type="number" id="cmBook" readonly style="background:#f0f0f0;color:#555;font-family:'IBM Plex Mono',monospace">
@@ -1126,7 +1127,9 @@ async function addAudit(action, description){
 // ══════════════════════════════════════════════
 function totalInc(){ return transactions.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0); }
 function totalExp(){ return transactions.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0); }
-function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-totalExp(); }
+function totalReturn(){ return transactions.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount),0); }
+function lastTxDate(){ return [...transactions].map(t=>t.tx_date).sort().at(-1)||todayStr(); }
+function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-(totalExp()-totalReturn()); }
 
 function lockCutoff(){
   // ถ้า period ถูกล็อกแล้ว ทุก tx ถูกล็อก
@@ -1295,7 +1298,7 @@ function renderCards(){
     <div class="card"><div class="card-lbl">รายจ่ายรวม</div><div class="card-val red mono">${fmt(totalExp())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='expense').length} รายการ</div></div>
     <div class="card"><div class="card-lbl">ยอดตามบัญชี</div><div class="card-val ${cl<0?'red':cl<500?'amber':''} mono">${fmt(cl)}</div><div class="card-sub">บาท</div></div>
     <div class="card"><div class="card-lbl">นับจริงได้</div><div class="card-val ${diff===null?'':diff<0?'red':diff===0?'green':'amber'} mono">${actualCash!==''?fmt(actual):'—'}</div><div class="card-sub">${diff===null?'ยังไม่ได้นับ':diff===0?'✅ ตรง':diff>0?`+${fmt(diff)} เกิน`:`${fmt(diff)} ขาด`}</div></div>
-    <div class="card"><div class="card-lbl">สถานะงวด</div><div class="card-val" style="font-size:14px">${currentPeriod?.is_locked?'🔒':'🟢'}</div><div class="card-sub">${currentPeriod?.is_locked?'ปิดยอดแล้ว':'เปิดอยู่'}</div></div>
+    <div class="card"><div class="card-lbl">คืนเงินสดย่อย</div><div class="card-val num-red mono">${fmt2(totalReturn())}</div><div class="card-sub">บาท</div></div>
   `;
 }
 
@@ -1350,7 +1353,7 @@ function renderTable(){
 function renderSummary(){
   const exp=totalExp();
   const map={};
-  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  transactions.filter(t=>t.tx_type==='expense'&&t.acc_code!=='1111-10').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
   const sorted=Object.entries(map).sort((a,b)=>b[1]-a[1]);
   let h='';
   if(!sorted.length) h=`<div class="empty">ยังไม่มีรายการรายจ่าย</div>`;
@@ -1364,7 +1367,8 @@ function renderSummary(){
   document.getElementById('stmtRows').innerHTML=`
     <div class="stmt-row"><span>ยอดยกมาต้นเดือน</span><span class="mono">${fmt2(parseFloat(currentPeriod?.open_bal)||0)} บาท</span></div>
     <div class="stmt-row"><span>รับเงินเพิ่มระหว่างเดือน</span><span class="num-green">+ ${fmt2(totalInc())} บาท</span></div>
-    <div class="stmt-row"><span>จ่ายออกระหว่างเดือน</span><span class="num-red">- ${fmt2(exp)} บาท</span></div>
+    <div class="stmt-row"><span>จ่ายออกระหว่างเดือน</span><span class="num-red">- ${fmt2(exp)} บาท
+    <div class="stmt-row"><span>คืนเงินสดย่อย</span><span class="num-green">+ ${fmt2(totalReturn())} บาท</span></div>
     <div class="stmt-total"><span>ยอดคงเหลือปลายเดือน</span><span class="mono" style="color:${cl<0?'#f9a8a8':'#f0ece0'}">${fmt2(cl)} บาท</span></div>`;
 }
 
@@ -1985,7 +1989,8 @@ async function confirmPreCount(){
       diff,
       note:note||(Math.abs(diff)<0.005?'ตรวจนับก่อนเบิกเงิน — ยอดตรง':'ตรวจนับก่อนเบิกเงิน'),
       by_role:currentRole,
-      by_name:currentUser?.name||currentRole
+      by_name:currentUser?.name||currentRole,
+      count_date:lastTxDate()
     });
     await addAudit('edit',
       `ตรวจนับก่อนเบิก | ยอดบัญชี: ${fmt2(book)} | จริง: ${fmt2(actual)} | ต่าง: ${fmt2(diff)}${note?' | หมายเหตุ: '+note:''}`
@@ -2155,6 +2160,9 @@ function closeLightbox(){ document.getElementById('lightbox').classList.remove('
 function openCloseMonthModal(){
   if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
   const cl=closing();
+  const lcd=lastTxDate();
+  const closeDateEl=document.getElementById('closeDateDisplay');
+  if(closeDateEl){ closeDateEl.textContent='วันที่ปดวงเงินที่ระบบจะบันทึก: '+lcd; }
   document.getElementById('cmBook').value=cl;
   document.getElementById('cmActual').value=actualCash||'';
   document.getElementById('cmNote').value='';
@@ -2229,7 +2237,7 @@ async function confirmCloseMonth(){
     // ล็อก period
     await sb.from('petty_cash_periods').update({
       is_locked:true,
-      locked_at:new Date().toISOString(),
+      locked_at:lastTxDate()+'T00:00:00.000Z',
       final_bal:actual
     }).eq('id',currentPeriod.id);
     currentPeriod.is_locked=true;
