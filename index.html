@@ -1379,28 +1379,47 @@ function renderSummary(){
 }
 
 async function renderClosedPeriods(){
-  const el=document.getElementById('closedPeriodHistory');
-  if(!el) return;
-  el.innerHTML='<p style="padding:14px;color:#888;font-size:13px">กำลังโหลด...</p>';
-  const{data:periods,error}=await sb.from('petty_cash_periods').select('*').eq('is_locked',true).order('period_no',{ascending:false});
-  if(error||!periods||!periods.length){
-    el.innerHTML='<p style="padding:14px;color:#888;font-size:13px">ยังไม่มีงวดที่ปิดแล้ว</p>';
-    return;
-  }
-  let html='';
-  for(const p of periods){
-    const{data:txs}=await sb.from('petty_cash_transactions').select('tx_type,acc_code,amount').eq('period_id',p.id);
-    const inc=(txs||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const exp=(txs||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const ret=(txs||[]).filter(t=>t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const[y,m]=(p.month_key||'').split('-');
-    const lbl=y&&m? MONTHS_TH[+m-1]+' '+(+y+543):p.month_key||'-';
-    const closedDate=p.locked_at? fmtDate(p.locked_at.substring(0,10)):'-';
-    html+=`<div class="stmt-row"><span style="font-weight:600">${lbl}</span><span class="mono" style="font-size:12px;color:#555">รับ ${fmt2(inc)} | จ่าย ${fmt2(exp)} | ทอน ${fmt2(ret)} | ปิด ${closedDate}</span></div>`;
-  }
-  el.innerHTML=html||'<p style="padding:14px;color:#888;font-size:13px">ยังไม่มีงวดที่ปิดแล้ว</p>';
+const el=document.getElementById('closedPeriodHistory');
+if(!el) return;
+el.innerHTML='<p style="padding:14px;color:#888;font-size:13px">กำลังโหลด...</p>';
+const{data:periods,error}=await sb.from('petty_cash_periods').select('*').eq('is_locked',true).order('period_no',{ascending:false});
+if(error||!periods||!periods.length){
+el.innerHTML='<p style="padding:14px;color:#888;font-size:13px">ยังไม่มีงวดที่ปิดแล้ว</p>';
+return;
 }
-
+let html='';
+for(const p of periods){
+const{data:txs}=await sb.from('petty_cash_transactions').select('tx_type,acc_code,amount').eq('period_id',p.id);
+const txList=txs||[];
+const incAll=txList.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const expAll=txList.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const reserve=txList.filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const ret=txList.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const openBal=parseFloat(p.open_bal)||0;
+const balance=openBal+incAll-expAll;
+const[y,m]=(p.month_key||'').split('-');
+const lbl=y&&m? MONTHS_TH[+m-1]+' '+(+y+543):p.month_key||'-';
+const closedDate=p.locked_at? fmtDate(p.locked_at.substring(0,10)):'-';
+html+=`<div style="border-bottom:.5px solid #f0ede6;padding:10px 14px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+<span style="font-weight:600;font-size:13px">${lbl}</span>
+<span style="font-size:11px;color:var(--muted)">ปิด: ${closedDate}</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:12px">
+<div style="color:var(--muted)">เงินต้น</div><div style="font-family:'IBM Plex Mono',monospace;text-align:right">${fmt2(openBal)} บาท</div>
+<div style="color:var(--muted)">รับเงินเพิ่ม</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">+ ${fmt2(incAll)} บาท</div>
+<div style="color:var(--muted)">ค่าใช้จ่ายรวม</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(expAll)} บาท</div>
+${reserve>0?`<div style="color:var(--muted);padding-left:8px">เบิกสำรอง (1111-30)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--blue);text-align:right">${fmt2(reserve)} บาท</div>`:''}
+${ret>0?`<div style="color:var(--muted);padding-left:8px">คืนเงินสดย่อย (1111-10)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--amber);text-align:right">${fmt2(ret)} บาท</div>`:''}
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid #e8e4dc;font-weight:700;font-size:12px">
+<span>เงินคงเหลือ</span>
+<span style="font-family:'IBM Plex Mono',monospace;color:${Math.abs(balance)<0.005?'var(--green)':balance<0?'var(--red)':'var(--amber)'}">${fmt2(balance)} บาท</span>
+</div>
+</div>`;
+}
+el.innerHTML=html||'<p style="padding:14px;color:#888;font-size:13px">ยังไม่มีงวดที่ปิดแล้ว</p>';
+}
 function renderReconcile(){
   const cl=closing(), actual=parseFloat(actualCash);
   const has=!isNaN(actual)&&actualCash!=='', diff=has?(actual-cl):null;
