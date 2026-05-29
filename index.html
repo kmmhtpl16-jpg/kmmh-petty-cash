@@ -449,10 +449,6 @@ tbody tr:hover td{background:#fafaf7}
   </div>
 </div>
 
-  <div class="sum-box">
-    <div class="sum-head">ประวัติการปิดวงเงิน</div>
-    <div id="countHistory"></div>
-  </div>
 <!-- ─── VIEW: SUMMARY ─── -->
 <div id="view-summary" style="display:none">
   <div class="sum-box">
@@ -477,6 +473,10 @@ tbody tr:hover td{background:#fafaf7}
     <div class="rec-grid" id="recGrid"></div>
   </div>
   <button class="btn btn-amber no-print" onclick="openCloseMonthModal()" style="margin:.5rem 0;display:block">🔒 ปิดวงเงินก้อนนี1</button>
+  <div class="sum-box">
+    <div class="sum-head">ประวัติการปิดวงเงิน</div>
+    <div id="countHistory"></div>
+  </div>
 </div>
 
 <!-- ─── VIEW: AUDIT ─── -->
@@ -1269,7 +1269,7 @@ function render(){
   } else { pact.innerHTML=''; }
   renderAlerts(); renderCards(); renderDiff(); renderTable();
   if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
-  if(document.getElementById('view-reconcile').style.display!=='none') renderReconcile();
+  if(document.getElementById('view-reconcile').style.display!=='none'){ renderReconcile(); renderCountHistory(); }
   if(document.getElementById('view-audit').style.display!=='none') renderAudit();
   if(document.getElementById('view-count').style.display!=='none') renderCountHistory();
 }
@@ -1569,7 +1569,7 @@ function switchTab(v){
     el.classList.toggle('on',['entries','count','summary','reconcile','withdraw','audit','export'][i]===v);
   });
   if(v==='summary') renderSummary();
-  if(v==='reconcile') renderReconcile();
+  if(v==='reconcile'){ renderReconcile(); renderCountHistory(); }
   if(v==='audit') renderAudit();
   if(v==='count') renderCountHistory();
   if(v==='withdraw') renderWithdrawTab();
