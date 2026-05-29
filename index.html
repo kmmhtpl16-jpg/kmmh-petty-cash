@@ -1505,12 +1505,7 @@ prevBox.style.display='';
 const allSorted=[...transactions].sort((a,b)=>a.tx_date.localeCompare(b.tx_date)||(a.created_at||'').localeCompare(b.created_at||''));
 // isKonDebt: ใช้กรองเฉพาะ ret10 (คืน 1111-10) — ไม่กรอง getKon เพื่อให้ exp รวมหนี้ข้ามก้อนในยอดคงเหลือ
 const isKonDebt=(t)=>(t.description||'').includes('หนี้');
-const getKon=(i)=>{
-  const expenses=allSorted.filter(t=>t.acc_code!=='1111-30'&&t.acc_code!=='1111-10'&&t.kon_number===(i+1));
-  const incomeAndReturn=allSorted.filter(t=>t.acc_code==='1111-30'||t.acc_code==='1111-10')
-    .filter(t=>i===0?t.tx_date<=inc1111[0].tx_date:(t.tx_date<=inc1111[i].tx_date&&t.tx_date>=inc1111[i-1].tx_date));
-  return [...expenses,...incomeAndReturn];
-};
+const getKon = (i) => allSorted.filter(t => t.kon_number === (i+1));
 const openBal0=parseFloat(currentPeriod?.open_bal)||0;
 let ph='';
 for(let i=0;i<inc1111.length;i++){
