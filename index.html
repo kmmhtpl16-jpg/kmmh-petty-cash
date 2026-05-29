@@ -12,7 +12,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#f5f3ee;--white:#fff;--dark:#1a1a1a;
-  --border:#e4e0d8;--border2:#ccc9c0;hh
+  --border:#e4e0d8;--border2:#ccc9c0;hhh
   --red:#c0392b;--red-bg:#fde8e8;--red-border:#f5b7b1;
   --green:#1e8449;--green-bg:#e8f5ee;--green-border:#a9dfbf;
   --amber:#b7770d;--amber-bg:#fef9e7;--amber-border:#f0c040;
@@ -1506,8 +1506,8 @@ const allSorted=[...transactions].sort((a,b)=>a.tx_date.localeCompare(b.tx_date)
 // isKonDebt: ใช้กรองเฉพาะ ret10 (คืน 1111-10) — ไม่กรอง getKon เพื่อให้ exp รวมหนี้ข้ามก้อนในยอดคงเหลือ
 const isKonDebt=(t)=>(t.description||'').includes('หนี้');
 const getKon=(i)=>{
-if(i===0) return allSorted.filter(t=>t.tx_date<=inc1111[0].tx_date);
-return allSorted.filter(t=>t.tx_date>inc1111[i-1].tx_date&&t.tx_date<=inc1111[i].tx_date);
+if(i===0) return allSorted.filter(t=>t.created_at<=inc1111[0].created_at);
+return allSorted.filter(t=>t.created_at>inc1111[i-1].created_at&&t.created_at<=inc1111[i].created_at);
 };
 const openBal0=parseFloat(currentPeriod?.open_bal)||0;
 let ph='';
