@@ -519,6 +519,16 @@ tbody tr:hover td{background:#fafaf7}
           style="font-family:'IBM Plex Mono',monospace;font-size:15px;width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;outline:none">
       </div>
       <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">รายละเอียดแบงค์ที่ขอเบิก *</label>
+        <div style="font-size:11.5px;color:var(--muted);margin:2px 0 4px">กรอกจำนวนแต่ละชนิด — ยอดรวมแบงค์ต้องเท่ากับยอดขอเบิกพอดี</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+          <thead><tr style="background:var(--bg)"><th style="padding:5px 8px;text-align:right;font-size:11px;color:var(--muted)">ชนิด</th><th style="padding:5px 8px;text-align:center;font-size:11px;color:var(--muted)">จำนวน</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:var(--muted)">รวม</th></tr></thead>
+          <tbody><tr><td style="padding:4px 8px;text-align:right">฿1,000</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="1000" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="1000">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿500</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="500" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="500">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿100</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="100" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="100">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿50</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="50" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="50">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿20</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="20" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="20">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿10</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="10" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="10">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿5</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="5" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="5">0</td></tr><tr><td style="padding:4px 8px;text-align:right">฿1</td><td style="padding:4px 8px"><input type="number" min="0" step="1" value="" placeholder="0" class="wr-denom" data-denom="1" oninput="calcWrDenom()" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;outline:none"></td><td style="padding:4px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" class="wr-denom-row" data-denom="1">0</td></tr></tbody>
+          <tfoot><tr style="background:var(--bg);font-weight:700"><td style="padding:6px 8px;text-align:right" colspan="2">รวมแบงค์</td><td style="padding:6px 8px;text-align:right;font-family:'IBM Plex Mono',monospace" id="wrDenomTotal">0</td></tr></tfoot>
+        </table>
+        <div id="wrDenomCheck" style="font-size:12px;margin-top:4px"></div>
+      </div>
+      <div>
         <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">หมายเหตุ / เหตุผล</label>
         <textarea id="wrReason" placeholder="เหตุผลการขอเบิก..." rows="2"
           style="width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;font-family:'Sarabun',sans-serif;font-size:13px;outline:none;resize:vertical"></textarea>
@@ -2764,7 +2774,53 @@ function renderWithdrawTab(){
   document.getElementById('wrBookDisplay').textContent=fmt2(closing())+' บาท';
   // แสดง/ซ่อน box ยื่นคำขอ (cashier และ manager ยื่นได้ auditor ทำไม่ได้)
   document.getElementById('wrRequestBox').style.display=currentRole==='auditor'?'none':'block';
+  calcWrDenom();
   renderWithdrawList();
+}
+
+// Feature #2 — ฟอร์มแบงค์ปลีกตอนขอเบิก
+function calcWrDenom(){
+  let total=0;
+  document.querySelectorAll('.wr-denom').forEach(function(inp){
+    const d=parseInt(inp.getAttribute('data-denom'))||0;
+    const qty=parseInt(inp.value)||0;
+    const row=d*qty;
+    total+=row;
+    const cell=document.querySelector('.wr-denom-row[data-denom="'+d+'"]');
+    if(cell) cell.textContent=fmt2(row);
+  });
+  const tEl=document.getElementById('wrDenomTotal');
+  if(tEl) tEl.textContent=fmt2(total);
+  const amount=parseFloat(document.getElementById('wrAmount').value)||0;
+  const chk=document.getElementById('wrDenomCheck');
+  if(chk){
+    if(amount<=0||document.getElementById('wrAmount').value===''){ chk.innerHTML=''; }
+    else if(Math.abs(total-amount)<0.005){ chk.innerHTML='<span style=\"color:var(--green)\">✅ ยอดแบงค์ตรงกับยอดขอเบิก</span>'; }
+    else { chk.innerHTML='<span style=\"color:var(--red)\">⚠️ ยอดแบงค์ '+fmt2(total)+' บาท ไม่เท่ากับยอดขอเบิก '+fmt2(amount)+' บาท (ต่าง '+fmt2(Math.abs(total-amount))+' บาท)</span>'; }
+  }
+  return total;
+}
+function getWrDenomData(){
+  const breakdown={};
+  document.querySelectorAll('.wr-denom').forEach(function(inp){
+    const d=inp.getAttribute('data-denom');
+    const qty=parseInt(inp.value)||0;
+    if(qty>0) breakdown[d]=qty;
+  });
+  return breakdown;
+}
+function wrBreakdownHtml(bb){
+  if(!bb||typeof bb!=='object') return '';
+  const order=[1000,500,100,50,20,10,5,1];
+  const parts=[];
+  let total=0;
+  order.forEach(function(d){ const q=parseInt(bb[d]||bb[String(d)]||0)||0; if(q>0){ parts.push('฿'+d.toLocaleString()+' × '+q); total+=d*q; } });
+  if(!parts.length) return '';
+  return '<div style=\"margin-top:.4rem;padding:.4rem .6rem;background:#fafafa;border:1px solid var(--border);border-radius:6px;font-size:12px\"><strong>💵 รายละเอียดแบงค์:</strong> '+parts.join(' · ')+' <span style=\"color:var(--muted)\">(รวม '+fmt2(total)+' บาท)</span></div>';
+}
+function resetWrDenom(){
+  document.querySelectorAll('.wr-denom').forEach(function(inp){ inp.value=''; });
+  calcWrDenom();
 }
 
 function previewWrCount(){
@@ -2789,6 +2845,9 @@ async function submitWithdrawRequest(){
     showToast('กรุณานับเงินและกรอกยอดที่นับจริงก่อน','error'); return;
   }
   if(!amount||amount<=0){ showToast('กรุณากรอกจำนวนเงินที่ขอเบิก','error'); return; }
+  // Feature #2 — validate: ยอดรวมแบงค์ต้องเท่ากับยอดขอเบิกพอดี
+  const denomTotal=calcWrDenom();
+  if(Math.abs(denomTotal-amount)>0.005){ showToast('ยอดรวมแบงค์ ('+fmt2(denomTotal)+') ต้องเท่ากับยอดขอเบิก ('+fmt2(amount)+') พอดี','error'); return; }
   if(!confirm(`ยืนยันยื่นคำขอเบิกเงิน ${fmt2(amount)} บาท?\n(ระบบจะส่งให้ผู้ตรวจสอบและผู้จัดการอนุมัติ)`)) return;
   showLoading(true,'กำลังยื่นคำขอ...');
   try{
@@ -2815,7 +2874,8 @@ async function submitWithdrawRequest(){
       status:'pending',
       requested_by_name:currentUser?.name||currentRole,
       requested_by_role:currentRole,
-      closing_before:book
+      closing_before:book,
+      bill_breakdown:getWrDenomData()
     });
     if(error) throw new Error(error.message);
     await addAudit('edit',
@@ -2828,6 +2888,7 @@ async function submitWithdrawRequest(){
     document.getElementById('wrCountedActual').value='';
     document.getElementById('wrAmount').value='';
     document.getElementById('wrReason').value='';
+      resetWrDenom();
     document.getElementById('wrCountPreview').innerHTML='';
     renderWithdrawList();
     showToast('ยื่นคำขอเบิกเงินแล้ว รอผู้ตรวจสอบและผู้จัดการอนุมัติ ✅','success');
@@ -2856,6 +2917,7 @@ function renderWithdrawList(){
             ยอดบัญชี: ${fmt2(wr.bal_book)} บาท · นับจริง: ${fmt2(wr.counted_actual)} บาท<br>
             ${wr.reason?`เหตุผล: ${wr.reason}`:''}
           </div>
+          ${wrBreakdownHtml(wr.bill_breakdown)}
         </div>
         <span class="wr-status ${wr.status}">${statusLabel[wr.status]||wr.status}</span>
       </div>
