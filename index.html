@@ -1510,16 +1510,6 @@ const getKon=(i)=>{
   const incomeAndReturn = allSorted.filter(t => t.acc_code === '1111-30' || t.acc_code === '1111-10')
     .filter(t => i === 0 ? t.tx_date <= inc1111[0].tx_date : (t.tx_date <= inc1111[i].tx_date && t.tx_date >= inc1111[i-1].tx_date));
   return [...expenses, ...incomeAndReturn];
-  const incAndRet=allSorted.filter(t=>t.acc_code==='1111-30'||t.acc_code==='1111-10');
-  const boundary=i===0
-    ?incAndRet.filter(t=>t.tx_date<=inc1111[0].tx_date)
-    :incAndRet.filter(t=>t.tx_date>=inc1111[i-1].tx_date&&t.tx_date<=inc1111[i].tx_date);
-  return [...expenses,...boundary];
-};
-const openBal0=parseFloat(currentPeriod?.open_bal)||0;
-let ph='';
-for(let i=0;i<inc1111.length;i++){
-const konTxs=getKon(i);
 const openBal=i===0?openBal0:0;
 const inc=konTxs.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const exp=konTxs.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
