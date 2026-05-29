@@ -3100,7 +3100,7 @@ async function mgrWithdraw(action){
 
     if(action==='approve'){
       // บันทึกรายการรับเงินเข้า transactions อัตโนมัติ
-      const today=new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
       const {error:te}=await sb.from('petty_cash_transactions').insert({
         period_id:currentPeriod.id,
         tx_date:today,
@@ -3250,7 +3250,7 @@ async function sendDailySummary(){
   const totalExp=expenses.reduce((s,t)=>s+parseFloat(t.amount),0);
   const totalInc=income.reduce((s,t)=>s+parseFloat(t.amount),0);
 
-  const dateStr=new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+  const dateStr=new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric', timeZone: 'Asia/Bangkok' });
 
   let msg=`📋 <b>สรุปเงินสดย่อยประจำวัน</b>\n`;
   msg+=`📅 ${dateStr}\n`;
