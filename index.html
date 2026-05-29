@@ -518,6 +518,12 @@ tbody tr:hover td{background:#fafaf7}
         <input type="number" id="wrAmount" placeholder="0" min="1"
           style="font-family:'IBM Plex Mono',monospace;font-size:15px;width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;outline:none">
       </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">วันที่เบิกเงิน (พ.ศ.) *</label>
+          <input type="text" id="wrDate" placeholder="09/05/2569" maxlength="10" inputmode="numeric"
+            style="font-family:'IBM Plex Mono',monospace;font-size:15px;width:100%;margin-top:2px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;outline:none">
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">รูปแบบ: วว/ดด/ปปปป (พ.ศ.) — เช่น 09/05/2569</div>
+        </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">รายละเอียดแบงค์ที่ขอเบิก *</label>
         <div style="font-size:11.5px;color:var(--muted);margin:2px 0 4px">กรอกจำนวนแต่ละชนิด — ยอดรวมแบงค์ต้องเท่ากับยอดขอเบิกพอดี</div>
@@ -2840,6 +2846,18 @@ function previewWrCount(){
 }
 
 async function submitWithdrawRequest(){
+  // ---- Feature: วันที่เบิกเงิน (พ.ศ.) ----
+  const wrDateRaw=(document.getElementById('wrDate').value||'').trim();
+  if(!wrDateRaw){ showToast('กรุณากรอกวันที่เบิกเงิน','error'); return; }
+  const wrDateM=wrDateRaw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if(!wrDateM){ showToast('รูปแบบวันที่ไม่ถูกต้อง ใช้ วว/ดด/ปปปป เช่น 09/05/2569','error'); return; }
+  const wrDD=parseInt(wrDateM[1],10), wrMM=parseInt(wrDateM[2],10), wrYYBE=parseInt(wrDateM[3],10);
+  if(wrYYBE<2560||wrYYBE>2580){ showToast('ปี พ.ศ. ไม่ถูกต้อง (ต้องอยู่ระหว่าง 2560-2580)','error'); return; }
+  const wrYYCE=wrYYBE-543;
+  const wrDateObj=new Date(wrYYCE, wrMM-1, wrDD);
+  if(wrMM<1||wrMM>12||wrDD<1||wrDD>31||wrDateObj.getFullYear()!==wrYYCE||wrDateObj.getMonth()!==wrMM-1||wrDateObj.getDate()!==wrDD){ showToast('วันที่ไม่ถูกต้อง (วัน/เดือนไม่ถูกต้อง)','error'); return; }
+  const wrCreatedAtISO=wrYYCE+'-'+String(wrMM).padStart(2,'0')+'-'+String(wrDD).padStart(2,'0')+'T00:00:00.000Z';
+
   const countedActual=parseFloat(document.getElementById('wrCountedActual').value);
   const amount=parseFloat(document.getElementById('wrAmount').value);
   const reason=document.getElementById('wrReason').value.trim();
@@ -2859,6 +2877,7 @@ async function submitWithdrawRequest(){
       period_id:currentPeriod.id,
       bal_book:book,
       bal_real:countedActual,
+      created_at:wrCreatedAtISO,
       diff:countedActual-book,
       note:'นับเงินก่อนยื่นคำขอเบิก',
       by_role:currentRole,
@@ -2871,6 +2890,7 @@ async function submitWithdrawRequest(){
     const {error}=await sb.from('petty_cash_withdrawals').insert({
       period_id:currentPeriod.id,
       requested_amount:amount,
+      created_at:wrCreatedAtISO,
       counted_actual:countedActual,
       bal_book:book,
       reason:reason||null,
@@ -2891,6 +2911,7 @@ async function submitWithdrawRequest(){
     document.getElementById('wrCountedActual').value='';
     document.getElementById('wrAmount').value='';
     document.getElementById('wrReason').value='';
+    document.getElementById('wrDate').value='';
       resetWrDenom();
     document.getElementById('wrCountPreview').innerHTML='';
     renderWithdrawList();
