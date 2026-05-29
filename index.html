@@ -610,7 +610,7 @@ tbody tr:hover td{background:#fafaf7}
   </div>
   <div class="field">
     <label>ประเภทบัญชี</label>
-    <select id="fAcct">
+    <select id="fAcct" required>
       <option value="">— เลือกรหัสบัญชี —</option>
     </select>
   </div>
@@ -2100,6 +2100,8 @@ async function saveEntry(){
   const acct=document.getElementById('fAcct').value;
   const note=document.getElementById('fNote').value;
   if(!date||!amount||amount<=0){ showToast('กรุณากรอกวันที่และจำนวนเงิน','error'); return; }
+  // Feature #1 — บังคับเลือกประเภทบัญชี (acc_code) ก่อนบันทึก
+  if(!acct||acct.trim()==''){ showToast('กรุณาเลือกประเภทค่าใช้จ่ายก่อนบันทึก','error'); return; }
 
   // ── ถ้าเป็นการเบิก/รับเงิน ต้องนับเงินก่อน ──
   if(formType==='income'&&!editTxId&&!_incomeFormReady){
