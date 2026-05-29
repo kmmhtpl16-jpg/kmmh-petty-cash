@@ -2201,8 +2201,19 @@ function closeLightbox(){ document.getElementById('lightbox').classList.remove('
 // ══════════════════════════════════════════════
 // CLOSE MONTH
 // ══════════════════════════════════════════════
-function openCloseMonthModal(){
+async function openCloseMonthModal(){
   if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
+  // Bug #2 — บังคับปิดตามลำดับก้อน: ห้ามปิดยอดถ้ายังมีก้อนก่อนหน้าที่ยังไม่ล็อก
+  try{
+    const curNo=parseInt(currentPeriod?.period_no)||0;
+    const {data:prevUnlocked}=await sb.from('petty_cash_periods')
+      .select('period_no,is_locked').lt('period_no',curNo).eq('is_locked',false)
+      .order('period_no',{ascending:true}).limit(1);
+    if(prevUnlocked&&prevUnlocked.length>0){
+      showToast('กรุณาปิดวงเงินก้อนที่ '+prevUnlocked[0].period_no+' ก่อน','error');
+      return;
+    }
+  }catch(e){ console.error('sequence check failed',e); showToast('ตรวจสอบลำดับก้อนไม่สำเร็จ: '+e.message,'error'); return; }
   const cl=closing();
   const lcd=lastTxDate();
   const closeDateEl=document.getElementById('closeDateDisplay');
