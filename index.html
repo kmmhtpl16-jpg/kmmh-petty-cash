@@ -2909,7 +2909,7 @@ function renderWithdrawList(){
     const canAudit=currentRole==='auditor'&&wr.status==='pending';
     const canApprove=currentRole==='manager'&&wr.status==='audited';
     const _reserveDebt=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30'&&(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const deficit=_reserveDebt>0?_reserveDebt:Math.abs(Math.min(wr.closing_before||0,0));
+    const deficit=(wr.closing_before||0)<0?_reserveDebt:0;
     h+=`<div class="wr-card ${wr.status==='approved'?'approved':wr.status==='rejected'?'rejected':wr.status==='audited'?'':'pending'}">
       <div class="wr-head">
         <div>
@@ -2925,7 +2925,7 @@ function renderWithdrawList(){
       </div>
       ${wr.audited_by_name?`<div class="wr-meta" style="margin-top:.25rem">🔍 ตรวจสอบโดย: ${wr.audited_by_name} · ${fmtDatetime(wr.audited_at)}${wr.audit_note?` · "${wr.audit_note}"`:''})</div>`:''}
       ${wr.approved_by_name?`<div class="wr-meta" style="margin-top:.25rem">✅ อนุมัติโดย: ${wr.approved_by_name} · ${fmtDatetime(wr.approved_at)}${wr.mgr_note?` · "${wr.mgr_note}"`:''})</div>`:''}
-      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − หนี้เก่า ${fmt2(deficit)} − คืน ${fmt2(wr.counted_actual||0)} = <strong>${fmt2(wr.requested_amount-deficit-(wr.counted_actual||0))}</strong> บาท`:`''`}
+      ${wr.status==='approved'?`<div class="wr-meta" style="margin-top:.5rem;padding:.4rem .6rem;background:#f0f8ff;border-radius:6px;border:1px solid #bfdbfe;color:#1e40af;font-size:12px">💵 เงินใช้ได้จริง = เบิก ${fmt2(wr.requested_amount)} − หนี้เก่า ${fmt2(deficit)} = <strong>${fmt2(wr.requested_amount-deficit)}</strong> บาท${(wr.counted_actual||0)>0?` (คืน ${fmt2(wr.counted_actual||0)} บาท)`:``}`:`''`}
       ${canAudit?`<div class="wr-actions">
         <button class="btn-reject" onclick="openWrAuditModal('${wr.id}','reject')">❌ ปฏิเสธ</button>
         <button class="btn-approve" onclick="openWrAuditModal('${wr.id}','approve')">🔍 ตรวจสอบและอนุมัติ</button>
