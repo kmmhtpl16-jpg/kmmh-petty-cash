@@ -2908,7 +2908,8 @@ function renderWithdrawList(){
   withdrawRequests.forEach(wr=>{
     const canAudit=currentRole==='auditor'&&wr.status==='pending';
     const canApprove=currentRole==='manager'&&wr.status==='audited';
-    const deficit=Math.abs(Math.min(wr.closing_before||0,0));
+    const _reserveDebt=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30'&&(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const deficit=_reserveDebt>0?_reserveDebt:Math.abs(Math.min(wr.closing_before||0,0));
     h+=`<div class="wr-card ${wr.status==='approved'?'approved':wr.status==='rejected'?'rejected':wr.status==='audited'?'':'pending'}">
       <div class="wr-head">
         <div>
