@@ -2907,7 +2907,7 @@ function renderWithdrawList(){
   }
   const statusLabel={pending:'⏳ รอตรวจสอบ',audited:'🔍 ผ่านตรวจสอบแล้ว',approved:'✅ อนุมัติแล้ว',rejected:'❌ ปฏิเสธ'};
   let h='';
-  withdrawRequests.forEach(wr=>{
+  const _inc1111=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30');const _totalKon=_inc1111.length;withdrawRequests.forEach((wr,_wrIdx)=>{const _konNo=_totalKon-_wrIdx;
     const canAudit=currentRole==='auditor'&&wr.status==='pending';
     const canApprove=currentRole==='manager'&&wr.status==='audited';
     const _reserveDebt=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30'&&(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount||0),0);
@@ -2915,7 +2915,7 @@ function renderWithdrawList(){
     h+=`<div class="wr-card ${wr.status==='approved'?'approved':wr.status==='rejected'?'rejected':wr.status==='audited'?'':'pending'}">
       <div class="wr-head">
         <div>
-          <div class="wr-amt">฿ ${fmt2(wr.requested_amount)}</div>
+          <div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:.15rem">\uD83D\uDD12 วงเงินก้อนที่ ${_konNo}</div><div class="wr-amt">฿ ${fmt2(wr.requested_amount)}</div>
           <div class="wr-meta">
             โดย: ${wr.requested_by_name||wr.requested_by_role} · ${fmtDatetime(wr.created_at)}<br>
             ยอดบัญชี: ${fmt2(wr.bal_book)} บาท · นับจริง: ${fmt2(wr.counted_actual)} บาท<br>
