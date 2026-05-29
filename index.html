@@ -1288,8 +1288,8 @@ function renderAlerts(){
   let h='';
   if(transactions.some(e=>e.acc_code&&e.acc_code.includes('5277-80')))
     h+=`<div class="alert alert-warn">⚠️ <span>มีรายการ <strong>"ค่าใช้จ่าย - ที่หายไป (5277-80)"</strong> ในเดือนนี้ — ควรตรวจสอบรหัสบัญชีให้ถูกต้อง</span></div>`;
-  if(closing() < -50)
-    h+=`<div class="alert alert-warn">🟡 <span>ยอดเงินสดย่อยติดลบชั่วคราว — รอเติมเงินเข้าระบบ (บันทึกรายการได้ตามปกติ)</span></div>`;
+  if(closing() < -0.005)
+    h+=`<div class="alert alert-danger">🔴 <span>ยอดติดลบ <strong>${fmt2(Math.abs(closing()))}</strong> บาท — กรุณาเบิกสำรองในวันทำการถัดไป</span></div>`;
   const actual=parseFloat(actualCash), book=closing();
   if(!isNaN(actual)&&actualCash!==''){
     const diff=actual-book;
