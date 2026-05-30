@@ -1508,7 +1508,7 @@ const isKonDebt=(t)=>(t.description||'').includes('หนี้');
 const getKon = (i) => allSorted.filter(t => t.kon_number === (i+1));
 const openBal0=parseFloat(currentPeriod?.open_bal)||0;
 let ph='';
-for(let i=0;i<inc1111.length;i++){
+const maxKon = Math.max(...transactions.map(t => t.kon_number || 0)); for (let i = 0; i < maxKon; i++){
 const konTxs=getKon(i);
 const openBal=i===0?openBal0:0;
 const inc=konTxs.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
