@@ -2294,7 +2294,7 @@ function previewCloseMonth(){
 
 async function checkCmMgrPin(){
   const val=document.getElementById('cmMgrPin').value;
-mount:reserveAmt,description:  const status=document.getElementById('cmMgrPinStatus');
+const status=document.getElementById('cmMgrPinStatus');
   if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ'; status.textContent=''; return; }
   // ตรวจ PIN ผ่าน Supabase — ดึงเฉพาะ role ไม่ select *
   try{
