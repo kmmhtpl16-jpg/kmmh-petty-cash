@@ -2789,7 +2789,7 @@ async function loadWithdrawRequests(){
 
 function renderWithdrawTab(){
   // อัปเดต book display
-  document.getElementById('wrBookDisplay').textContent=fmt2(closing())+' บาท';
+  const _latestWr=[...(withdrawRequests||[])].sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''))[0];const _wrBookVal=_latestWr?parseFloat(_latestWr.closing_before||0):closing();document.getElementById('wrBookDisplay').textContent=fmt2(_wrBookVal)+' บาท';
   // แสดง/ซ่อน box ยื่นคำขอ (cashier และ manager ยื่นได้ auditor ทำไม่ได้)
   document.getElementById('wrRequestBox').style.display=currentRole==='auditor'?'none':'block';
   calcWrDenom();
