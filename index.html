@@ -1321,7 +1321,7 @@ function renderCards(){
     <div class="card"><div class="card-lbl">รายจ่ายรวม</div><div class="card-val red mono">${fmt(totalExp())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='expense').length} รายการ</div></div>
     <div class="card"><div class="card-lbl">ยอดตามบัญชี</div><div class="card-val ${cl<0?'red':cl<500?'amber':''} mono">${fmt(cl)}</div><div class="card-sub">บาท</div></div>
     <div class="card"><div class="card-lbl">นับจริงได้</div><div class="card-val ${diff===null?'':diff<0?'red':diff===0?'green':'amber'} mono">${actualCash!==''?fmt(actual):'—'}</div><div class="card-sub">${diff===null?'ยังไม่ได้นับ':diff===0?'✅ ตรง':diff>0?`+${fmt(diff)} เกิน`:`${fmt(diff)} ขาด`}</div></div>
-    <div class="card"><div class="card-lbl">คืนเงินสดย่อย</div><div class="card-val num-red mono">${fmt2(transactions.filter(t=>t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount),0))}</div><div class="card-sub">บาท</div></div>
+    <div class="card"><div class="card-lbl">คืนเงินสดย่อย</div><div class="card-val num-red mono">${fmt2(transactions.filter(t=>t.acc_code==='1111-10'&&!(t.description||'').includes('หนี้')).reduce((s,t)=>s+parseFloat(t.amount),0))}</div><div class="card-sub">บาท</div></div>
   `;
 }
 
@@ -1523,7 +1523,7 @@ let prevReserve = 0;
       const _prevWr=_wrAsc[i-1];
       if(_prevWr){
         const _cb=parseFloat(_prevWr.closing_before||_prevWr.bal_book||0);
-        prevReserve=(_cb<-0.005)?Math.abs(_cb):0;
+        prevReserve=(_cb<-0.005)?Math.abs(_cb)+parseFloat(_prevWr.counted_actual||0):0;
       }
     }
     const usable=inc30-prevReserve;
@@ -2937,7 +2937,7 @@ function renderWithdrawList(){
   }
   const statusLabel={pending:'⏳ รอตรวจสอบ',audited:'🔍 ผ่านตรวจสอบแล้ว',approved:'✅ อนุมัติแล้ว',rejected:'❌ ปฏิเสธ'};
   let h='';
-  const _inc1111=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30');const _totalKon=_inc1111.length;const _wrAsc=[...withdrawRequests].sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));const _debtByWrId={};_wrAsc.forEach((w,_i)=>{const _prev=_i>0?_wrAsc[_i-1]:null;const _cb=_prev?parseFloat(_prev.closing_before||_prev.bal_book||0):0;_debtByWrId[w.id]=(_cb<-0.005)?Math.abs(_cb):0;});withdrawRequests.forEach((wr,_wrIdx)=>{const _konNo=_totalKon-_wrIdx;
+  const _inc1111=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30');const _totalKon=_inc1111.length;const _wrAsc=[...withdrawRequests].sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));const _debtByWrId={};_wrAsc.forEach((w,_i)=>{const _prev=_i>0?_wrAsc[_i-1]:null;const _cb=_prev?parseFloat(_prev.closing_before||_prev.bal_book||0):0;_debtByWrId[w.id]=(_cb<-0.005)?Math.abs(_cb)+parseFloat(_prev.counted_actual||0):0;});withdrawRequests.forEach((wr,_wrIdx)=>{const _konNo=_totalKon-_wrIdx;
     const canAudit=currentRole==='auditor'&&wr.status==='pending';
     const canApprove=currentRole==='manager'&&wr.status==='audited';
     const deficit=_debtByWrId[wr.id]||0;
