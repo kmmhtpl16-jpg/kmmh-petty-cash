@@ -1489,7 +1489,7 @@ try{
       const {data:pTx}=await sb.from('petty_cash_transactions').select('amount,description,acc_code,tx_type').eq('period_id',pPrev[0].id).eq('tx_type','income').eq('acc_code','1111-30');
       const prevDebt=(pTx||[]).filter(t=>(t.description||'').includes('สำรอง')).reduce((a,t)=>a+parseFloat(t.amount||0),0);
       if(prevDebt>0){
-        prevDebtHtml=`<div style=\"background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:.75rem 1rem;margin:.5rem;color:var(--red)\"><div style=\"font-weight:600;font-size:13px;margin-bottom:.35rem\">📦 หนี้เก่ายกมาจากวงเงินก้อนที่ ${pPrev[0].period_no}</div><div style=\"display:flex;justify-content:space-between;font-size:13px\"><span>เบิกสำรองค้างจ่าย</span><span class=\"mono\" style=\"font-weight:700\">${fmt2(prevDebt)} บาท</span></div></div>`;
+        prevDebtHtml=`<div style=\"background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;color:var(--red)\"><div style=\"font-weight:600;font-size:13px;margin-bottom:.35rem\">📦 หนี้เก่ายกมาจากวงเงินก้อนที่ ${pPrev[0].period_no}</div><div style=\"display:flex;justify-content:space-between;font-size:13px\"><span>เบิกสำรองค้างจ่าย</span><span class=\"mono\" style=\"font-weight:700\">${fmt2(prevDebt)} บาท</span></div></div>`;
       }
     }
   }
@@ -1518,13 +1518,16 @@ const ret10=konTxs.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10'&&!isK
 const balance=openBal+inc-exp;
 const deficit=Math.abs(Math.min(balance,0));
 let prevReserve = 0;
-if(i>0){
-  const pk = getKon(i-1);
-  prevReserve = pk.filter(t => t.tx_type === 'income' && t.acc_code === '1111-30')
-                  .reduce((s,t) => s + parseFloat(t.amount||0), 0);
-}
-const usable=inc30-prevReserve;
-ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin:.5rem .5rem .5rem;border:1px solid #dbeafe"><div style="font-weight:600;font-size:13px;margin-bottom:.5rem;color:#1e40af">\uD83D\uDD12 รอบเงินก้อนที่ ${i+1} (ปิดแล้ว)</div><div style="display:grid;grid-template-columns:1fr auto;gap:.3rem .75rem;font-size:12.5px"><div style="color:var(--muted)">เงินต้น</div><div style="font-family:'IBM Plex Mono',monospace;text-align:right">${fmt2(openBal)} บาท</div><div style="color:var(--muted)">รับเงิน (1111-30)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">+ ${fmt2(inc30)} บาท</div>${prevReserve>0?`<div style="color:var(--muted)">หักหนี้เก่า</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(prevReserve)} บาท</div><div style="color:var(--muted)">ใช้ได้จริง</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">${fmt2(usable)} บาท</div>`:`<div style="color:var(--muted)">ค่าใช้จ่ายรวม</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(exp)} บาท</div>`}${ret10>0?`<div style="color:var(--muted);padding-left:8px;font-size:11.5px">คืนเงินสดย่อย (1111-10)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:11.5px;text-align:right">${fmt2(ret10)} บาท</div>`:''}<div style="border-top:1px solid #bfdbfe;margin:.25rem 0;grid-column:1/-1"></div><div style="font-weight:700">เงินคงเหลือ</div><div style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:${Math.abs(balance)<0.005?'var(--green)':balance<0?'var(--red)':'var(--amber)'};text-align:right">${fmt2(balance)} บาท</div>${deficit>0?`<div style="font-size:11px;color:var(--muted);margin-top:.3rem">⚠️ เงินเกินบัญชี ${fmt2(deficit)} บาท — ถูกนำไปหักออกจากวงเงินใหม่แล้ว</div>`:''}</div>`;
+    if(i>0){
+      const _wrAsc=[...(withdrawRequests||[])].sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));
+      const _prevWr=_wrAsc[i-1];
+      if(_prevWr){
+        const _cb=parseFloat(_prevWr.closing_before||_prevWr.bal_book||0);
+        prevReserve=(_cb<-0.005)?Math.abs(_cb):0;
+      }
+    }
+    const usable=inc30-prevReserve;
+ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;border:1px solid #dbeafe"><div style="font-weight:600;font-size:13px;margin-bottom:.5rem;color:#1e40af">\uD83D\uDD12 รอบเงินก้อนที่ ${i+1} (ปิดแล้ว)</div><div style="display:grid;grid-template-columns:1fr auto;gap:.3rem .75rem;font-size:12.5px"><div style="color:var(--muted)">เงินต้น</div><div style="font-family:'IBM Plex Mono',monospace;text-align:right">${fmt2(openBal)} บาท</div><div style="color:var(--muted)">รับเงิน (1111-30)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">+ ${fmt2(inc30)} บาท</div>${prevReserve>0?`<div style="color:var(--muted)">หักหนี้เก่า</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(prevReserve)} บาท</div><div style="color:var(--muted)">ใช้ได้จริง</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">${fmt2(usable)} บาท</div>`:`<div style="color:var(--muted)">ค่าใช้จ่ายรวม</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(exp)} บาท</div>`}${ret10>0?`<div style="color:var(--muted);padding-left:8px;font-size:11.5px">คืนเงินสดย่อย (1111-10)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:11.5px;text-align:right">${fmt2(ret10)} บาท</div>`:''}<div style="border-top:1px solid #bfdbfe;margin:.25rem 0;grid-column:1/-1"></div><div style="font-weight:700">เงินคงเหลือ</div><div style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:${Math.abs(balance)<0.005?'var(--green)':balance<0?'var(--red)':'var(--amber)'};text-align:right">${fmt2(balance)} บาท</div>${deficit>0?`<div style="font-size:11px;color:var(--muted);margin-top:.3rem">⚠️ เงินเกินบัญชี ${fmt2(deficit)} บาท — ถูกนำไปหักออกจากวงเงินใหม่แล้ว</div>`:''}</div></div>`;
 }
 prevDetail.innerHTML=prevDebtHtml+ph;
 }
@@ -2934,11 +2937,10 @@ function renderWithdrawList(){
   }
   const statusLabel={pending:'⏳ รอตรวจสอบ',audited:'🔍 ผ่านตรวจสอบแล้ว',approved:'✅ อนุมัติแล้ว',rejected:'❌ ปฏิเสธ'};
   let h='';
-  const _inc1111=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30');const _totalKon=_inc1111.length;withdrawRequests.forEach((wr,_wrIdx)=>{const _konNo=_totalKon-_wrIdx;
+  const _inc1111=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30');const _totalKon=_inc1111.length;const _wrAsc=[...withdrawRequests].sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||''));const _debtByWrId={};_wrAsc.forEach((w,_i)=>{const _prev=_i>0?_wrAsc[_i-1]:null;const _cb=_prev?parseFloat(_prev.closing_before||_prev.bal_book||0):0;_debtByWrId[w.id]=(_cb<-0.005)?Math.abs(_cb):0;});withdrawRequests.forEach((wr,_wrIdx)=>{const _konNo=_totalKon-_wrIdx;
     const canAudit=currentRole==='auditor'&&wr.status==='pending';
     const canApprove=currentRole==='manager'&&wr.status==='audited';
-    const _reserveDebt=(transactions||[]).filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30'&&(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount||0),0);
-    const deficit=(wr.closing_before||0)<0?_reserveDebt:0;
+    const deficit=_debtByWrId[wr.id]||0;
     h+=`<div class="wr-card ${wr.status==='approved'?'approved':wr.status==='rejected'?'rejected':wr.status==='audited'?'':'pending'}">
       <div class="wr-head">
         <div>
