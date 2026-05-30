@@ -1512,7 +1512,7 @@ const maxKon = Math.max(...transactions.map(t => t.kon_number || 0)); for (let i
 const konTxs=getKon(i);
 const openBal=i===0?openBal0:0;
 const inc=konTxs.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-const exp=konTxs.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const exp=konTxs.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const inc30=konTxs.filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30').reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const ret10=konTxs.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const balance=openBal+inc-exp;
