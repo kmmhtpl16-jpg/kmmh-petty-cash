@@ -2294,8 +2294,7 @@ function previewCloseMonth(){
 
 async function checkCmMgrPin(){
   const val=document.getElementById('cmMgrPin').value;
-  const btn=document.getElementById('btnSaveCloseMonth');
-  const status=document.getElementById('cmMgrPinStatus');
+mount:reserveAmt,description:  const status=document.getElementById('cmMgrPinStatus');
   if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ'; status.textContent=''; return; }
   // ตรวจ PIN ผ่าน Supabase — ดึงเฉพาะ role ไม่ select *
   try{
@@ -2320,6 +2319,7 @@ async function checkCmMgrPin(){
 }
 
 async function confirmCloseMonth(){
+  const _btn=document.getElementById('btnSaveCloseMonth');if(_btn)_btn.disabled=true;
   const actual=parseFloat(document.getElementById('cmActual').value);
   const note=document.getElementById('cmNote').value;
   const book=closing();
