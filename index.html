@@ -1079,7 +1079,7 @@ async function loadPeriodForMonth(){
         const {data:prevTx}=await sb.from('petty_cash_transactions')
           .select('tx_type,amount').eq('period_id',prevPeriod[0].id);
         const prevIn=(prevTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
-        const prevOut=(prevTx||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0);
+        const prevOut=(prevTx||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0);
         carryBal=(parseFloat(prevPeriod[0].open_bal)||0)+prevIn-prevOut;
       }
       // หา period_no สูงสุด
@@ -1150,7 +1150,7 @@ async function addAudit(action, description){
 // COMPUTED
 // ══════════════════════════════════════════════
 function totalInc(){ return transactions.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0); }
-function totalExp(){ return transactions.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0); }
+function totalExp(){ return transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0); }
 function lastTxDate(){ return [...transactions].map(t=>t.tx_date).sort().at(-1)||todayStr(); }
 function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-totalExp(); }
 
@@ -1236,7 +1236,7 @@ async function autoOpening(){
     if(!prevP||prevP.length===0){ showToast('ไม่พบข้อมูลเดือนก่อน','error'); showLoading(false); return; }
     const {data:prevTx}=await sb.from('petty_cash_transactions').select('tx_type,amount').eq('period_id',prevP[0].id);
     const pIn=(prevTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
-    const pOut=(prevTx||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0);
+    const pOut=(prevTx||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0);
     const carry=(parseFloat(prevP[0].open_bal)||0)+pIn-pOut;
     await sb.from('petty_cash_periods').update({open_bal:carry}).eq('id',currentPeriod.id);
     currentPeriod.open_bal=carry;
@@ -1318,7 +1318,7 @@ function renderCards(){
   document.getElementById('cards').innerHTML=`
     <div class="card"><div class="card-lbl">ยอดตั้งต้น</div><div class="card-val mono">${fmt(parseFloat(currentPeriod?.open_bal)||0)}</div><div class="card-sub">บาท</div></div>
     <div class="card"><div class="card-lbl">รับเงินเพิ่ม</div><div class="card-val green mono">${fmt(totalInc())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='income').length} รายการ</div></div>
-    <div class="card"><div class="card-lbl">รายจ่ายรวม</div><div class="card-val red mono">${fmt(totalExp())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='expense').length} รายการ</div></div>
+    <div class="card"><div class="card-lbl">รายจ่ายรวม</div><div class="card-val red mono">${fmt(totalExp())}</div><div class="card-sub">${transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).length} รายการ</div></div>
     <div class="card"><div class="card-lbl">ยอดตามบัญชี</div><div class="card-val ${cl<0?'red':cl<500?'amber':''} mono">${fmt(cl)}</div><div class="card-sub">บาท</div></div>
     <div class="card"><div class="card-lbl">นับจริงได้</div><div class="card-val ${diff===null?'':diff<0?'red':diff===0?'green':'amber'} mono">${actualCash!==''?fmt(actual):'—'}</div><div class="card-sub">${diff===null?'ยังไม่ได้นับ':diff===0?'✅ ตรง':diff>0?`+${fmt(diff)} เกิน`:`${fmt(diff)} ขาด`}</div></div>
     <div class="card"><div class="card-lbl">คืนเงินสดย่อย</div><div class="card-val num-red mono">${fmt2(transactions.filter(t=>t.acc_code==='1111-10'&&!(t.description||'').includes('หนี้')).reduce((s,t)=>s+parseFloat(t.amount),0))}</div><div class="card-sub">บาท</div></div>
@@ -1368,7 +1368,7 @@ function renderTable(){
     </tr>`;
   });
   document.getElementById('entryTbody').innerHTML=h;
-  const exp=transactions.filter(t=>t.tx_type==='expense');
+  const exp=transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t));
   document.getElementById('tblFooter').innerHTML=exp.length
     ?`<div class="tbl-footer"><span>รวมรายจ่าย ${exp.length} รายการ</span><span style="color:#f9a8a8;font-family:'IBM Plex Mono',monospace">${fmt2(totalExp())} บาท</span></div>`:'';
 }
@@ -1376,7 +1376,7 @@ function renderTable(){
 function renderSummary(){
   const exp=totalExp();
   const map={};
-  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
   const sorted=Object.entries(map).sort((a,b)=>b[1]-a[1]);
   let h='';
   if(!sorted.length) h=`<div class="empty">ยังไม่มีรายการรายจ่าย</div>`;
@@ -1408,7 +1408,7 @@ for(const p of periods){
 const{data:txs}=await sb.from('petty_cash_transactions').select('tx_type,acc_code,amount').eq('period_id',p.id);
 const txList=txs||[];
 const incAll=txList.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-const expAll=txList.filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const expAll=txList.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const reserve=txList.filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30').reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const ret=txList.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const openBal=parseFloat(p.open_bal)||0;
@@ -2451,7 +2451,7 @@ function exportCSV(){
   csv+='สรุปตามบัญชี\r\n';
   csv+='รหัสบัญชี,ยอดรวม (บาท),%\r\n';
   const map={};
-  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
   const exp=totalExp();
   Object.entries(map).sort((a,b)=>b[1]-a[1]).forEach(([acct,total])=>{
     csv+=`${csvEsc(acct)},${total},${exp>0?(total/exp*100).toFixed(1):0}%\r\n`;
@@ -2482,7 +2482,7 @@ function exportXLSX(){
   const expTotal=totalExp(), cl=closing();
   const actual=parseFloat(actualCash);
   const map={};
-  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
   const summaryRows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
   function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function cS(v){ return `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`; }
@@ -2543,7 +2543,7 @@ function exportPDF(){
   const hasActual=!isNaN(actual)&&actualCash!=='';
   const diff=hasActual?actual-cl:null;
   const map={};
-  transactions.filter(t=>t.tx_type==='expense').forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
+  transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).forEach(t=>{ const k=t.acc_code||'(ไม่ระบุ)'; map[k]=(map[k]||0)+(parseFloat(t.amount)||0); });
   const summaryRows=Object.entries(map).sort((a,b)=>b[1]-a[1]);
   const diffColor=diff===null?'#888':Math.abs(diff)<0.005?'#1e8449':diff<0?'#c0392b':'#b7770d';
   const diffText=diff===null?'ยังไม่ได้นับ':Math.abs(diff)<0.005?'✅ ตรง':diff<0?`ขาด ${fmt2(Math.abs(diff))} บาท`:`เกิน ${fmt2(diff)} บาท`;
@@ -3246,7 +3246,7 @@ async function sendDailySummary(){
     .gte('tx_date',today)
     .lte('tx_date',today);
 
-  const expenses=(txns||[]).filter(t=>t.tx_type==='expense');
+  const expenses=(txns||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t));
   const income=(txns||[]).filter(t=>t.tx_type==='income');
 
   const grouped={};
@@ -3282,7 +3282,7 @@ async function sendDailySummary(){
   if(prd){
   const {data:allTx}=await sb.from('petty_cash_transactions').select('tx_type,amount').eq('period_id',prd.id);
   const pInc=(allTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
-  const pExp=(allTx||[]).filter(t=>t.tx_type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0);
+  const pExp=(allTx||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0);
   const balanceNow=(parseFloat(prd.open_bal)||0)+pInc-pExp;
   msg+=`\n💰 ยอดเงินคงเหลือ: <b>${balanceNow.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})} บาท</b>`;
   const {data:cnts}=await sb.from('petty_cash_counts').select('bal_real,by_name').eq('period_id',prd.id).eq('count_date',today).order('counted_at',{ascending:false}).limit(1);
