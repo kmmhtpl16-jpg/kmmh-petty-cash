@@ -1411,7 +1411,7 @@ const txList=txs||[];
 const incAll=txList.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const expAll=txList.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const reserve=txList.filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-const ret=txList.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+const ret=txList.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)&&t.acc_code==='1111-10').reduce((s,t)=>s+parseFloat(t.amount||0),0);
 const openBal=parseFloat(p.open_bal)||0;
 const balance=openBal+incAll-expAll;
 const[y,m]=(p.month_key||'').split('-');
