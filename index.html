@@ -3282,10 +3282,10 @@ async function sendDailySummary(){
   const todayMonth=today.substring(0,7);
   const {data:prd}=await sb.from('petty_cash_periods').select('id,open_bal').eq('month_key',todayMonth).maybeSingle();
   if(prd){
-  const {data:allTx}=await sb.from('petty_cash_transactions').select('tx_type,amount').eq('period_id',prd.id);
-  const pInc=(allTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
+  const {data:allTx}=await sb.from('petty_cash_transactions').select('tx_type,amount,acc_code,description').eq('period_id',prd.id);
+  const pInc=(allTx||[]).filter(t=>t.tx_type==='income'&&!(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount),0);
   const pExp=(allTx||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0);
-  const balanceNow=(parseFloat(prd.open_bal)||0)+pInc-pExp;
+  const pCashRet=(allTx||[]).filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10'&&(t.description||'').includes('คืนเงินสดย่อย')).reduce((s,t)=>s+parseFloat(t.amount),0);const balanceNow=(parseFloat(prd.open_bal)||0)+pInc-pExp-pCashRet;
   msg+=`\n💰 ยอดเงินคงเหลือ: <b>${balanceNow.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})} บาท</b>`;
   const {data:cnts}=await sb.from('petty_cash_counts').select('bal_real,by_name').eq('period_id',prd.id).eq('count_date',today).order('counted_at',{ascending:false}).limit(1);
   if(cnts&&cnts.length){ const c=cnts[0]; msg+=`\n🔍 ยอดตรวจนับ: <b>${parseFloat(c.bal_real).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})} บาท</b>\n✅ ยืนยันโดย: <b>${c.by_name||'ไม่ระบุ'}</b>`; }
