@@ -1150,7 +1150,7 @@ async function addAudit(action, description){
 // COMPUTED
 // ══════════════════════════════════════════════
 function totalInc(){ return transactions.filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0); }
-function isKonDebt(t){return (t.description||'').includes('หนี้');}
+function isKonDebt(t){return (t.description||'').includes('หนี้')||t.acc_code==='1111-10';}
 function totalExp(){ return transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0); }
 function lastTxDate(){ return [...transactions].map(t=>t.tx_date).sort().at(-1)||todayStr(); }
 function closing(){ return (parseFloat(currentPeriod?.open_bal)||0)+totalInc()-totalExp(); }
