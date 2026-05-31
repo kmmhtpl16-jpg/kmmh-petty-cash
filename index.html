@@ -1504,7 +1504,7 @@ if(!inc1111.length){
 prevBox.style.display='';
 const allSorted=[...transactions].sort((a,b)=>a.tx_date.localeCompare(b.tx_date)||(a.created_at||'').localeCompare(b.created_at||''));
 // isKonDebt: ใช้กรองเฉพาะ ret10 (คืน 1111-10) — ไม่กรอง getKon เพื่อให้ exp รวมหนี้ข้ามก้อนในยอดคงเหลือ
-const isKonDebt=(t)=>(t.description||'').includes('หนี้');
+function isKonDebt(t){return (t.description||'').includes('หนี้');}
 const getKon = (i) => allSorted.filter(t => t.kon_number === (i+1));
 const openBal0=parseFloat(currentPeriod?.open_bal)||0;
 let ph='';
