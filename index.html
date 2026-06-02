@@ -731,9 +731,9 @@ tbody tr:hover td{background:#fafaf7}
 <!-- ─── CLOSE MONTH MODAL ─── -->
 <div class="modal-bg" id="closeMonthModal">
 <div class="modal">
-  <h2>🔒 ปิดยอดประจำเดือน</h2>
+  <h2>🔒 ปิดก้อนเงิน</h2>
   <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#7a5500;margin-bottom:1rem;line-height:1.7">
-    ⚠️ การปิดยอดจะ <strong>ล็อกรายการทั้งหมด</strong>ในเดือนนี้ และยอดคงเหลือจะถูกยกไปเป็นยอดเปิดเดือนถัดไปโดยอัตโนมัติ
+    ⚠️ กรอกยอดเงินนับจริงในกล่อง แล้วกด <strong>ปิดก้อนนี้</strong> — ระบบจะบันทึกและถามว่าจะเบิกก้อนใหม่เลยไหม
   </div>
   <p id="closeDateDisplay" style="font-size:12px;color:#888;margin-bottom:8px;font-style:italic"></p>
   <div class="field">
@@ -760,7 +760,7 @@ tbody tr:hover td{background:#fafaf7}
   </div>
   <div class="modal-btns">
     <button class="btn-cancel-sm" onclick="closeModal('closeMonthModal')">ยกเลิก</button>
-    <button class="btn btn-dark btn-save" id="btnSaveCloseMonth" onclick="confirmCloseMonth()" disabled style="opacity:.4;cursor:not-allowed">🔒 รอรหัสผู้จัดการ</button>
+    <button class="btn btn-dark btn-save" id="btnSaveCloseMonth" onclick="closeKon()" disabled style="opacity:.4;cursor:not-allowed">🔒 รอรหัสผู้จัดการ</button>
   </div>
 </div>
 </div>
@@ -2296,7 +2296,8 @@ function previewCloseMonth(){
 
 async function checkCmMgrPin(){
   const val=document.getElementById('cmMgrPin').value;
-const status=document.getElementById('cmMgrPinStatus');
+  const btn=document.getElementById('btnSaveCloseMonth');
+  const status=document.getElementById('cmMgrPinStatus');
   if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ'; status.textContent=''; return; }
   // ตรวจ PIN ผ่าน Supabase — ดึงเฉพาะ role ไม่ select *
   try{
@@ -2308,18 +2309,270 @@ const status=document.getElementById('cmMgrPinStatus');
       .maybeSingle();
     if(data){
       btn.disabled=false; btn.style.opacity='1';
-      btn.textContent=`✅ ยืนยัน (${data.name||'Manager'})`;
+      btn.textContent=`✅ ปิดก้อนนี้ (${data.name||'Manager'})`;
       status.textContent=`✅ ยืนยันตัวตนแล้ว: ${data.name||'Manager'}`; status.style.color='var(--green)';
-      btn._confirmedMgrId=data.id; // เก็บ id ไว้บันทึก audit
+      btn._confirmedMgrId=data.id;
+      btn._confirmedMgrName=data.name||'Manager';
     } else {
       btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
       status.textContent='❌ รหัสไม่ถูกต้อง'; status.style.color='var(--red)';
       document.getElementById('cmMgrPin').value='';
-      btn._confirmedMgrId=null;
+      btn._confirmedMgrId=null; btn._confirmedMgrName=null;
     }
   }catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
 }
 
+// ═══════════════════════════════════════════════════════════
+// KMMH Petty Cash v5 — ปิดก้อน (atomic via RPC close_kon)
+// ═══════════════════════════════════════════════════════════
+
+// konClosing: คำนวณ closing เฉพาะก้อน (scope ตรงกับ RPC close_kon เป๊ะ)
+function konClosing(konNumber, openBal){
+  const txs = transactions.filter(t => t.kon_number === konNumber);
+  const inc = txs.filter(t =>
+    t.tx_type==='income' && t.acc_code==='1111-30' &&
+    !(t.description||'').includes('สำรอง')
+  ).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const exp = txs.filter(t =>
+    t.tx_type==='expense' && t.acc_code!=='1111-10'
+  ).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const ret = txs.filter(t =>
+    t.tx_type==='expense' && t.acc_code==='1111-10' &&
+    (t.description||'').includes('คืนเงินสดย่อย')
+  ).reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  return (parseFloat(openBal)||0) + inc - exp - ret;
+}
+
+async function getOpenKon(){
+  const {data,error}=await sb.from('petty_cash_kon')
+    .select('*')
+    .eq('period_id',currentPeriod.id)
+    .eq('status','open')
+    .order('kon_number',{ascending:false})
+    .limit(1)
+    .single();
+  if(error) throw new Error('ไม่พบก้อนที่เปิดอยู่: '+error.message);
+  return data;
+}
+
+async function openNewKon(periodId,konNumber,openBal,openedBy){
+  const today=bkkDate(new Date());
+  // 1. ตรวจหนี้ค้างจากก้อนก่อน = reserve (income 1111-30 desc มี "สำรอง") ของก้อน konNumber-1
+  let debtFromPrev = 0;
+  if(konNumber > 1){
+    const {data:pTx, error:dErr}=await sb.from('petty_cash_transactions')
+      .select('amount,description')
+      .eq('period_id',periodId)
+      .eq('tx_type','income')
+      .eq('acc_code','1111-30')
+      .eq('kon_number',konNumber-1)
+      .like('description','%สำรอง%');
+    if(dErr) throw new Error('ตรวจหนี้ก้อนก่อนไม่ได้: '+dErr.message);
+    debtFromPrev = (pTx||[]).reduce((a,t)=>a+parseFloat(t.amount||0),0);
+  }
+
+  // 2. เบิกเงินก้อนใหม่ (income 1111-30)
+  const {error:txErr}=await sb.from('petty_cash_transactions').insert({
+    period_id:periodId, tx_date:today, tx_type:'income', acc_code:'1111-30',
+    description:`เบิกเงินสดย่อยก้อน ${konNumber}`,
+    amount:openBal, by_role:'manager', by_name:openedBy,
+    kon_number:konNumber, is_return:false
+  });
+  if(txErr) throw new Error('บันทึก income ก้อนใหม่ไม่ได้: '+txErr.message);
+
+  // 3. ส่งคืนหนี้ก้อนก่อน (ถ้ามี) — expense 1111-10 ผูกก้อนใหม่
+  if(debtFromPrev > 0.005){
+    const {error:debtErr}=await sb.from('petty_cash_transactions').insert({
+      period_id:periodId, tx_date:today, tx_type:'expense', acc_code:'1111-10',
+      description:`ส่งคืนหนี้ก้อนก่อน (ก้อน ${konNumber-1})`,
+      amount:debtFromPrev, by_role:'manager', by_name:openedBy,
+      kon_number:konNumber, is_return:false
+    });
+    if(debtErr) throw new Error('บันทึกส่งคืนหนี้ก้อนก่อนไม่ได้: '+debtErr.message);
+  }
+
+  // 4. สร้าง row ก้อนใหม่
+  const {error:konErr}=await sb.from('petty_cash_kon').insert({
+    period_id:periodId, kon_number:konNumber, open_bal:openBal,
+    status:'open', opened_at:new Date().toISOString(), opened_by:openedBy
+  });
+  if(konErr) throw new Error('สร้างก้อนใหม่ไม่ได้: '+konErr.message);
+
+  return { debtFromPrev };
+}
+
+async function closeKon(){
+  const btn=document.getElementById('btnSaveCloseMonth');
+  if(btn) btn.disabled=true;
+
+  const actual=parseFloat(document.getElementById('cmActual').value);
+  const note=(document.getElementById('cmNote').value||'').trim();
+  if(isNaN(actual)||actual<0){
+    showToast('กรอกยอดเงินนับจริงให้ถูกต้อง','error');
+    if(btn) btn.disabled=false;
+    return;
+  }
+
+  const closedBy=btn?._confirmedMgrName||currentUser?.name||currentRole||'manager';
+
+  let kon;
+  try{ kon=await getOpenKon(); }
+  catch(e){ showToast(e.message,'error'); if(btn)btn.disabled=false; return; }
+
+  const bookClosing=konClosing(kon.kon_number, kon.open_bal);
+  const diff=actual-bookClosing;
+  if(Math.abs(diff)>0.005 && !note){
+    showToast('ยอดนับไม่ตรงบัญชี — กรอกหมายเหตุด้วย','error');
+    document.getElementById('cmNote')?.focus();
+    if(btn)btn.disabled=false;
+    return;
+  }
+
+  let reserve=0;
+  if(bookClosing<-0.005){
+    const reserveInput=document.getElementById('reserveInput');
+    const reserveRow=document.getElementById('reserveRow');
+    const reserveMin=document.getElementById('reserveMin');
+    if(!reserveRow||reserveRow.style.display==='none'){
+      if(reserveMin) reserveMin.textContent=fmt2(Math.abs(bookClosing));
+      if(reserveRow) reserveRow.style.display='block';
+      if(reserveInput){reserveInput.value='';reserveInput.focus();}
+      if(btn)btn.disabled=false;
+      return;
+    }
+    reserve=parseFloat(reserveInput?.value);
+    if(isNaN(reserve)||reserve<Math.abs(bookClosing)-0.005){
+      showToast(`reserve ต้องไม่น้อยกว่า ${fmt2(Math.abs(bookClosing))} บาท`,'error');
+      if(btn)btn.disabled=false;
+      return;
+    }
+  }
+
+  const confirmMsg=
+    `ปิดก้อน ${kon.kon_number}\n`+
+    `ยอดตามบัญชี: ${fmt2(bookClosing)} บาท\n`+
+    `ยอดนับจริง:  ${fmt2(actual)} บาท\n`+
+    (reserve>0?`เงินสำรอง:    ${fmt2(reserve)} บาท\n`:'')+
+    `\nยืนยันปิดก้อนนี้?`;
+  if(!confirm(confirmMsg)){if(btn)btn.disabled=false;return;}
+
+  showLoading(true,'กำลังปิดก้อน...');
+  let result;
+  try{
+    const {data,error}=await sb.rpc('close_kon',{
+      p_kon_id:kon.id, p_actual_cash:actual,
+      p_reserve:reserve, p_closed_by:closedBy
+    });
+    if(error) throw new Error(error.message);
+    result=data;
+  }catch(e){
+    showLoading(false);
+    showToast(`❌ ปิดก้อนล้มเหลว: ${e.message}`,'error');
+    try{
+      await sendTelegram(
+        `🔴 ปิดก้อน ${kon.kon_number} ล้มเหลว\n`+
+        `❌ สาเหตุ: ${e.message}\n`+
+        `📌 สถานะ: ยกเลิกทั้งหมด ก้อนยังเปิดอยู่\n`+
+        `⏰ ${bkkDate(new Date())} · โดย: ${closedBy}`
+      );
+    }catch(_){}
+    if(btn)btn.disabled=false;
+    return;
+  }
+
+  showLoading(false);
+
+  if(note){
+    try{
+      await sb.from('petty_cash_counts').insert({
+        period_id:currentPeriod.id, bal_book:bookClosing,
+        bal_real:actual, diff:diff, note:note,
+        by_role:currentRole, by_name:closedBy
+      });
+    }catch(cErr){ console.warn('บันทึก note ไม่ได้:',cErr.message); }
+  }
+
+  await addAudit('edit',
+    `ปิดก้อน ${result.kon_number} | บัญชี: ${fmt2(result.closing_calc)} | นับ: ${fmt2(actual)} | reserve: ${fmt2(reserve)} | โดย: ${closedBy}`
+  );
+
+  try{
+    await sendTelegram(
+      `🟢 ปิดก้อน ${result.kon_number} เรียบร้อย\n`+
+      `💰 ยอดปิด: ${fmt2(result.close_bal)} บาท\n`+
+      `📥 รับ: ${fmt2(result.total_inc)} | 📤 จ่าย: ${fmt2(result.total_exp)}\n`+
+      (reserve>0?`🏦 สำรอง: ${fmt2(reserve)} บาท\n`:'')+
+      `⏰ ${result.closed_at} · โดย: ${closedBy}`
+    );
+  }catch(_){}
+
+  await loadTransactions();
+  const rRow=document.getElementById('reserveRow');
+  if(rRow) rRow.style.display='none';
+  closeModal('closeMonthModal');
+  render();
+
+  showOpenNextKonDialog(result,closedBy);
+}
+
+function showOpenNextKonDialog(closedResult,closedBy){
+  const nextKon=closedResult.kon_number+1;
+  const periodId=currentPeriod.id;
+  const existing=document.getElementById('openNextKonModal');
+  if(existing) existing.remove();
+
+  const modal=document.createElement('div');
+  modal.id='openNextKonModal';
+  modal.className='modal-bg';
+  modal.style.display='flex';
+  modal.innerHTML=`
+    <div class="modal" style="max-width:360px;text-align:center">
+      <h3 style="margin-bottom:12px">ก้อน ${closedResult.kon_number} ปิดแล้ว ✅</h3>
+      <p style="color:var(--muted);margin-bottom:20px">เบิกก้อน ${nextKon} เลยไหม?</p>
+      <div class="field">
+        <label>ยอดเบิก (บาท)</label>
+        <input id="nextKonAmount" type="number" value="20000"
+          style="text-align:center;font-size:18px;font-family:'IBM Plex Mono',monospace">
+      </div>
+      <div class="modal-btns">
+        <button class="btn-cancel-sm" id="btnSkipNextKon">ยังก่อน</button>
+        <button class="btn btn-dark" id="btnOpenNextKon">เบิกก้อน ${nextKon} เลย</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  document.getElementById('btnOpenNextKon').onclick=async()=>{
+    const amount=parseFloat(document.getElementById('nextKonAmount').value);
+    if(isNaN(amount)||amount<=0){showToast('กรอกยอดเบิกให้ถูกต้อง','error');return;}
+    modal.remove();
+    showLoading(true,`กำลังเปิดก้อน ${nextKon}...`);
+    try{
+      const r=await openNewKon(periodId,nextKon,amount,closedBy);
+      await loadTransactions();
+      render();
+      const debtMsg = r.debtFromPrev>0.005 ? ` (ส่งคืนหนี้ก้อนก่อน ${fmt2(r.debtFromPrev)} บาท)` : '';
+      showToast(`เปิดก้อน ${nextKon} สำเร็จ ✅${debtMsg}`,'success');
+      try{
+        await sendTelegram(
+          `🔵 เปิดก้อน ${nextKon} แล้ว\n`+
+          `💰 วงเงิน: ${fmt2(amount)} บาท\n`+
+          (r.debtFromPrev>0.005?`↩️ ส่งคืนหนี้ก้อนก่อน: ${fmt2(r.debtFromPrev)} บาท\n`:'')+
+          `⏰ ${bkkDate(new Date())} · โดย: ${closedBy}`
+        );
+      }catch(_){}
+    }catch(e){
+      showToast(`❌ เปิดก้อนใหม่ไม่ได้: ${e.message}`,'error');
+    }
+    showLoading(false);
+  };
+
+  document.getElementById('btnSkipNextKon').onclick=()=>{
+    modal.remove();
+    showToast(`ปิดก้อน ${closedResult.kon_number} เรียบร้อย — เบิกทีหลังได้`,'success');
+  };
+}
+
+// ── confirmCloseMonth เดิม (legacy, ไม่ถูกเรียกแล้ว — เก็บไว้อ้างอิง) ──
 async function confirmCloseMonth(){
   const _btn=document.getElementById('btnSaveCloseMonth');if(_btn)_btn.disabled=true;
   const actual=parseFloat(document.getElementById('cmActual').value);
