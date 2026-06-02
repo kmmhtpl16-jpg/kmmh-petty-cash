@@ -358,10 +358,8 @@ tbody tr:hover td{background:#fafaf7}
 <!-- Tabs -->
 <div class="tabs no-print">
   <button class="tab on" onclick="switchTab('entries')">📋 บันทึกรายการ</button>
-  <button class="tab"    onclick="switchTab('count')">🔒 ปิดวงเงินก้อนนี้</button>
   <button class="tab"    onclick="switchTab('summary')">📊 สรุปเดือน</button>
-  <button class="tab"    onclick="switchTab('reconcile')">✅ ตรวจนับ</button>
-  <button class="tab"    onclick="switchTab('withdraw')">🏦 เบิกเงิน</button>
+  <button class="tab"    onclick="switchTab('reconcile')">✅ ปิดก้อน / ตรวจนับ</button>
   <button class="tab"    onclick="switchTab('audit')">🔒 ประวัติ</button>
   <button class="tab"    onclick="switchTab('export')">📤 Export</button>
 </div>
@@ -472,7 +470,7 @@ tbody tr:hover td{background:#fafaf7}
     <p style="font-size:12.5px;color:#666;line-height:1.6;margin-bottom:.75rem">กรอกยอดเงินที่นับจริงในช่อง <strong>"นับเงินจริงได้"</strong> ด้านบน ระบบเปรียบเทียบให้อัตโนมัติ</p>
     <div class="rec-grid" id="recGrid"></div>
   </div>
-  <button class="btn btn-amber no-print" onclick="openCloseMonthModal()" style="margin:.5rem 0;display:block">🔒 ปิดวงเงินก้อนนี1</button>
+  <button class="btn btn-amber no-print" onclick="openCloseMonthModal()" style="margin:.75rem 0;display:block;width:100%;font-size:15px;padding:12px">🔒 ปิดก้อนนี้ + นับเงิน</button>
   <div class="sum-box">
     <div class="sum-head">ประวัติการปิดวงเงิน</div>
     <div id="countHistory"></div>
@@ -1587,17 +1585,21 @@ async function confirmDeleteCount(){
 // TAB
 // ══════════════════════════════════════════════
 function switchTab(v){
+  // v5: ปิด flow เก่า — tab 'count' และ 'withdraw' ถูกถอดออกจาก nav แล้ว
+  // map การคลิกเก่า (ถ้ามี) ให้ไปลง reconcile แทน กัน null error
+  if(v==='count'||v==='withdraw') v='reconcile';
+  const NAV=['entries','summary','reconcile','audit','export'];   // ต้องตรงลำดับปุ่มใน .tabs
+  // ซ่อน/แสดง view ทั้งหมด (รวม view เก่าที่ยังอยู่ใน DOM แต่ไม่มีปุ่มแล้ว)
   ['entries','count','summary','reconcile','withdraw','audit','export'].forEach(t=>{
-    document.getElementById('view-'+t).style.display=t===v?'block':'none';
+    const el=document.getElementById('view-'+t);
+    if(el) el.style.display=(t===v)?'block':'none';
   });
   document.querySelectorAll('.tab').forEach((el,i)=>{
-    el.classList.toggle('on',['entries','count','summary','reconcile','withdraw','audit','export'][i]===v);
+    el.classList.toggle('on',NAV[i]===v);
   });
   if(v==='summary') renderSummary();
   if(v==='reconcile'){ renderReconcile(); renderCountHistory(); }
   if(v==='audit') renderAudit();
-  if(v==='count') renderCountHistory();
-  if(v==='withdraw') renderWithdrawTab();
 }
 
 // ══════════════════════════════════════════════
@@ -1901,8 +1903,8 @@ function openEditTx(id){
       if(t==='income' && (!countRecords || countRecords.length===0)){
         closeModal('formModal');
     setTimeout(()=>{
-      alert('⚠️ กรุณาปิดวงเงินก้อนนี้และนับเงินจริงก่อนเพิ่มวงเงินใหม่');
-      switchTab('count');
+      alert('⚠️ กรุณาปิดก้อนนี้และนับเงินจริงก่อน แล้วระบบจะถามว่าเบิกก้อนใหม่เลยไหม');
+      switchTab('reconcile');
     }, 150);
     return;
   }
