@@ -2355,8 +2355,8 @@ async function getOpenKon(){
   return data;
 }
 
-async function openNewKon(periodId,konNumber,openBal,openedBy){
-  const today=bkkDate(new Date());
+async function openNewKon(periodId,konNumber,openBal,openedBy,openDate){
+  const today=openDate||bkkDate(new Date());
   // 1. ตรวจหนี้ค้างจากก้อนก่อน = reserve (income 1111-30 desc มี "สำรอง") ของก้อน konNumber-1
   let debtFromPrev = 0;
   if(konNumber > 1){
@@ -2419,6 +2419,10 @@ async function closeKon(){
   try{ kon=await getOpenKon(); }
   catch(e){ showToast(e.message,'error'); if(btn)btn.disabled=false; return; }
 
+  // วันที่ปิด = วันล่าสุดที่คีย์ในก้อนนี้ (ตรงเอกสาร) — ไม่ใช่วันนี้
+  const konTxDates = transactions.filter(t=>t.kon_number===kon.kon_number).map(t=>t.tx_date).filter(Boolean).sort();
+  const closeTxDate = konTxDates.at(-1) || bkkDate(new Date());
+
   const bookClosing=konClosing(kon.kon_number, kon.open_bal);
   const diff=actual-bookClosing;
   if(Math.abs(diff)>0.005 && !note){
@@ -2461,7 +2465,8 @@ async function closeKon(){
   try{
     const {data,error}=await sb.rpc('close_kon',{
       p_kon_id:kon.id, p_actual_cash:actual,
-      p_reserve:reserve, p_closed_by:closedBy
+      p_reserve:reserve, p_closed_by:closedBy,
+      p_tx_date:closeTxDate
     });
     if(error) throw new Error(error.message);
     result=data;
@@ -2512,10 +2517,10 @@ async function closeKon(){
   closeModal('closeMonthModal');
   render();
 
-  showOpenNextKonDialog(result,closedBy);
+  showOpenNextKonDialog(result,closedBy,closeTxDate);
 }
 
-function showOpenNextKonDialog(closedResult,closedBy){
+function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
   const nextKon=closedResult.kon_number+1;
   const periodId=currentPeriod.id;
   const existing=document.getElementById('openNextKonModal');
@@ -2547,7 +2552,7 @@ function showOpenNextKonDialog(closedResult,closedBy){
     modal.remove();
     showLoading(true,`กำลังเปิดก้อน ${nextKon}...`);
     try{
-      const r=await openNewKon(periodId,nextKon,amount,closedBy);
+      const r=await openNewKon(periodId,nextKon,amount,closedBy,closeTxDate);
       await loadTransactions();
       render();
       const debtMsg = r.debtFromPrev>0.005 ? ` (ส่งคืนหนี้ก้อนก่อน ${fmt2(r.debtFromPrev)} บาท)` : '';
