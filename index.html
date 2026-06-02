@@ -1018,8 +1018,7 @@ async function enterApp(){
   // Manager zone in export
   document.getElementById('managerZone').style.display=currentRole==='manager'?'block':'none';
   // Init month
-  const d=new Date();
-  month=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  month=bkkMonth();
   document.getElementById('monthPicker').value=month;
   document.getElementById('monthPicker').addEventListener('change',async e=>{
     month=e.target.value;
@@ -1197,20 +1196,21 @@ function fmtDate(s){
   const[y,m,d]=s.split('-');
   return `${d}/${m}/${+y+543}`;
 }
-function todayStr(){
-  const d=new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function nowStr(){ return new Date().toLocaleString('th-TH'); }
+// ════════ เวลามาตรฐาน (จุดเดียวจบ) ════════
+// หลักการ: DB เก็บ UTC เสมอ — แปลงเป็นเวลาไทยเฉพาะตอนแสดง/คำนวณวัน
+function bkkDate(d){ return new Date(d||Date.now()).toLocaleDateString('en-CA',{timeZone:'Asia/Bangkok'}); } // "YYYY-MM-DD" ไทย
+function bkkMonth(d){ return bkkDate(d).slice(0,7); } // "YYYY-MM" ไทย
+function todayStr(){ return bkkDate(); }
+function nowStr(){ return new Date().toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}); }
 function monthLabel(){
   if(!month) return '';
   const[y,m]=month.split('-');
   return `${MONTHS_TH[+m-1]} ${+y+543}`;
 }
 function prevMonth(){
-  const d=new Date(month+'-01');
-  d.setMonth(d.getMonth()-1);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  let [y,m]=month.split('-').map(Number);
+  m--; if(m<1){ m=12; y--; }
+  return `${y}-${String(m).padStart(2,'0')}`;
 }
 
 // ══════════════════════════════════════════════
@@ -3162,10 +3162,18 @@ async function mgrWithdraw(action){
 
 function fmtDatetime(ts){
   if(!ts) return '—';
-  const s=ts.replace('T',' ').slice(0,16); // "YYYY-MM-DD HH:MM"
-  const[datePart,timePart]=s.split(' ');
-  const[y,m,d]=datePart.split('-');
-  return `${d}/${m}/${+y+543} ${timePart||''}`.trim();
+  // ถ้า timestamp ไม่มี timezone ติดมา ให้ถือว่าเป็น UTC
+  let iso = String(ts).includes('T') ? String(ts) : String(ts).replace(' ','T');
+  if(!/(?:Z|[+\-]\d{2}:?\d{2})$/.test(iso)) iso += 'Z';
+  const dt = new Date(iso);
+  if(isNaN(dt.getTime())) return ts;
+  const p = new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Asia/Bangkok',
+    year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', hour12:false
+  }).formatToParts(dt);
+  const g = t => (p.find(x=>x.type===t)||{}).value || '';
+  return `${g('day')}/${g('month')}/${+g('year')+543} ${g('hour')}:${g('minute')}`;
 }
 
 // ══════════════════════════════════════════════
@@ -3238,10 +3246,10 @@ async function sendTelegram(message){
 }
 
 async function sendDailySummary(){
-  const todayKey='tg_sent_'+new Date().toISOString().split('T')[0];
+  const todayKey='tg_sent_'+bkkDate();
   if(localStorage.getItem(todayKey)) return;
 
-  const today=new Date().toISOString().split('T')[0];
+  const today=bkkDate();
   const {data:txns}=await sb
     .from('petty_cash_transactions')
     .select('acc_code,amount,tx_type')
