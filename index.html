@@ -1234,10 +1234,12 @@ async function autoOpening(){
     const pm=prevMonth();
     const {data:prevP}=await sb.from('petty_cash_periods').select('id,open_bal').eq('month_key',pm).limit(1);
     if(!prevP||prevP.length===0){ showToast('ไม่พบข้อมูลเดือนก่อน','error'); showLoading(false); return; }
-    const {data:prevTx}=await sb.from('petty_cash_transactions').select('tx_type,amount').eq('period_id',prevP[0].id);
-    const pIn=(prevTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
-    const pOut=(prevTx||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0);
-    const carry=(parseFloat(prevP[0].open_bal)||0)+pIn-pOut;
+    const {data:prevTx}=await sb.from('petty_cash_transactions').select('tx_type,amount,description,acc_code').eq('period_id',prevP[0].id);
+    // คำนวณยอดยกมาด้วยสูตรเดียวกับ closing() เป๊ะ: open_bal + totalInc − totalExp − cashReturn
+    const pIn=(prevTx||[]).filter(t=>t.tx_type==='income'&&!(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount),0);
+    const pOut=(prevTx||[]).filter(t=>t.tx_type==='expense'&&!((t.description||'').includes('หนี้')||t.acc_code==='1111-10')).reduce((s,t)=>s+parseFloat(t.amount),0);
+    const pReturn=(prevTx||[]).filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10'&&(t.description||'').includes('คืนเงินสดย่อย')).reduce((s,t)=>s+parseFloat(t.amount),0);
+    const carry=(parseFloat(prevP[0].open_bal)||0)+pIn-pOut-pReturn;
     await sb.from('petty_cash_periods').update({open_bal:carry}).eq('id',currentPeriod.id);
     currentPeriod.open_bal=carry;
     document.getElementById('openingInput').value=carry;
