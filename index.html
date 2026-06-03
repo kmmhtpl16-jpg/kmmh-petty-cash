@@ -1363,8 +1363,8 @@ function renderTable(){
       <td style="text-align:right"><span class="${tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
       <td><div class="acct-cell">${tx.acc_code||'<span style="color:#ccc">—</span>'}</div>${tx.description?`<div class="note-cell">${tx.description}</div>`:''}</td>
       <td style="text-align:center">${receiptBtn}</td>
-            <td><span class="badge ${tx.is_return?'badge-ret':tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'badge-ret':tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.is_return?'คืน':tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'คืน':tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
-                  <td style="text-align:right"><span class="${tx.tx_type==='expense'&&tx.acc_code==='1111-10'?'num-amber':tx.tx_type==='expense'?'num-red':'num-green'}">${tx.tx_type==='expense'?'-':'+'} ${fmt2(tx.amount)}</span></td>
+      <td style="text-align:right" class="mono"><span class="${neg?'num-red':'num-green'}">${fmt2(tx.runBal)}</span></td>
+      <td class="no-print">${actButtons}</td>
     </tr>`;
   });
   document.getElementById('entryTbody').innerHTML=h;
