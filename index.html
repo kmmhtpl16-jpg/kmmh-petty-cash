@@ -577,10 +577,9 @@ tbody tr:hover td{background:#fafaf7}
     <div class="manager-zone" id="managerZone" style="display:none">
       <h4>⚙️ จัดการงวด (Manager เท่านั้น)</h4>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอดรายเดือน</button>
         <button class="btn btn-outline" onclick="autoBackup()">💾 Backup JSON</button>
       </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--muted)">การปิดยอดจะล็อกรายการเดือนนี้ และสร้างงวดใหม่เดือนถัดไปโดยอัตโนมัติ</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted)">ปิดก้อนเงินทำผ่านแท็บ "ปิดก้อน / ตรวจนับ"</div>
     </div>
   </div>
   <div class="export-section">
@@ -900,6 +899,7 @@ let currentUser = null;      // row from petty_cash_users
 let pinBuffer = '';
 let month = '';              // 'YYYY-MM'
 let currentPeriod = null;    // row from petty_cash_periods
+let currentOpenKon = null;   // row from petty_cash_kon (status='open') หรือ null ถ้าไม่มีก้อนเปิด
 let transactions = [];       // rows from petty_cash_transactions
 let countRecords = [];        // rows from petty_cash_counts
 let auditLog = [];           // rows from petty_cash_audit
@@ -1051,7 +1051,7 @@ function doLogout(){
   document.getElementById('mainApp').style.display='none';
   document.getElementById('roleBadge').style.display='none';
   // Reset state
-  currentPeriod=null; transactions=[]; countRecords=[]; auditLog=[]; actualCash='';
+  currentPeriod=null; currentOpenKon=null; transactions=[]; countRecords=[]; auditLog=[]; actualCash='';
 }
 
 // ══════════════════════════════════════════════
@@ -1072,12 +1072,21 @@ async function loadPeriodForMonth(){
       const {data:prevPeriod}=await sb.from('petty_cash_periods')
         .select('id,open_bal').eq('month_key',prevM).limit(1);
       if(prevPeriod&&prevPeriod.length>0){
-        // คำนวณยอดปิดเดือนก่อน
+        // คำนวณยอดปิดเดือนก่อน — ตรงกับ closing() เป๊ะ (exclude "สำรอง", subtract cashReturn)
         const {data:prevTx}=await sb.from('petty_cash_transactions')
-          .select('tx_type,amount').eq('period_id',prevPeriod[0].id);
-        const prevIn=(prevTx||[]).filter(t=>t.tx_type==='income').reduce((s,t)=>s+parseFloat(t.amount),0);
-        const prevOut=(prevTx||[]).filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((s,t)=>s+parseFloat(t.amount),0);
-        carryBal=(parseFloat(prevPeriod[0].open_bal)||0)+prevIn-prevOut;
+          .select('tx_type,amount,acc_code,description').eq('period_id',prevPeriod[0].id);
+        const prevIn=(prevTx||[]).filter(t=>
+          t.tx_type==='income'&&t.acc_code==='1111-30'&&
+          !(t.description||'').includes('สำรอง')
+        ).reduce((s,t)=>s+parseFloat(t.amount),0);
+        const prevOut=(prevTx||[]).filter(t=>
+          t.tx_type==='expense'&&!isKonDebt(t)
+        ).reduce((s,t)=>s+parseFloat(t.amount),0);
+        const prevReturn=(prevTx||[]).filter(t=>
+          t.tx_type==='expense'&&t.acc_code==='1111-10'&&
+          (t.description||'').includes('คืนเงินสดย่อย')
+        ).reduce((s,t)=>s+parseFloat(t.amount),0);
+        carryBal=(parseFloat(prevPeriod[0].open_bal)||0)+prevIn-prevOut-prevReturn;
       }
       // หา period_no สูงสุด
       const {data:allP}=await sb.from('petty_cash_periods').select('period_no').order('period_no',{ascending:false}).limit(1);
@@ -1112,6 +1121,19 @@ async function loadTransactions(){
     .select('*').eq('period_id',currentPeriod.id)
     .order('tx_date',{ascending:true}).order('created_at',{ascending:true});
   transactions=data||[];
+  await loadCurrentKon();
+}
+async function loadCurrentKon(){
+  if(!currentPeriod){ currentOpenKon=null; return; }
+  try{
+    const {data}=await sb.from('petty_cash_kon')
+      .select('*')
+      .eq('period_id',currentPeriod.id)
+      .eq('status','open')
+      .order('kon_number',{ascending:false})
+      .limit(1);
+    currentOpenKon=(data&&data.length>0)?data[0]:null;
+  }catch(e){ currentOpenKon=null; }
 }
 async function loadCounts(){
   if(!currentPeriod) return;
@@ -1282,9 +1304,7 @@ function render(){
     ? '<span class="period-locked-badge">🔒 ปิดยอดแล้ว</span>'
     : '<span class="period-open-badge">🟢 เปิดอยู่</span>';
   const pact=document.getElementById('periodActions');
-  if(currentRole==='manager'&&!currentPeriod.is_locked){
-    pact.innerHTML=`<button class="btn btn-sm btn-amber" onclick="openCloseMonthModal()">🔒 ปิดยอดเดือนนี้</button>`;
-  } else { pact.innerHTML=''; }
+  pact.innerHTML='';  // ลบปุ่ม "ปิดยอดเดือนนี้" (ชื่อหลอก + เรียก closeKon ซ้ำกับแท็บปิดก้อน) — ปิดก้อนผ่านแท็บ "ปิดก้อน/ตรวจนับ" เท่านั้น
   renderAlerts(); renderCards(); renderDiff(); renderTable();
   if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
   if(document.getElementById('view-reconcile').style.display!=='none'){ renderReconcile(); renderCountHistory(); }
@@ -1294,6 +1314,16 @@ function render(){
 
 function renderAlerts(){
   let h='';
+  // ── banner เปิดก้อนแรก (โชว์เมื่อไม่มีก้อนเปิดอยู่ + ยังไม่ lock + เป็น manager) ──
+  if(currentOpenKon===null && !currentPeriod.is_locked && currentRole==='manager'){
+    const ob=parseFloat(currentPeriod.open_bal)||0;
+    const debtLine=ob<-0.005
+      ?`<br><span style="font-size:12px">⚠️ มียอดติดหนี้จากเดือนก่อน <strong>${fmt2(Math.abs(ob))} บาท</strong> — เงินใช้ได้จริง ≈ ${fmt2(20000+ob)} บาท</span>`
+      :(ob>0.005?`<br><span style="font-size:12px">💰 ยอดยกมา ${fmt2(ob)} บาท</span>`:'');
+    h+=`<div class="alert alert-info" style="cursor:pointer" onclick="showOpenFirstKonDialog()">
+      🟢 <span>งวดนี้ยังไม่มีก้อนเงินเปิดอยู่${debtLine} — <strong style="text-decoration:underline">แตะที่นี่เพื่อเปิดก้อนใหม่ ➕</strong></span>
+    </div>`;
+  }
   if(transactions.some(e=>e.acc_code&&e.acc_code.includes('5277-80')))
     h+=`<div class="alert alert-warn">⚠️ <span>มีรายการ <strong>"ค่าใช้จ่าย - ที่หายไป (5277-80)"</strong> ในเดือนนี้ — ควรตรวจสอบรหัสบัญชีให้ถูกต้อง</span></div>`;
   if(closing() < -0.005)
@@ -2522,6 +2552,81 @@ async function closeKon(){
   render();
 
   showOpenNextKonDialog(result,closedBy,closeTxDate);
+}
+
+// ── เปิดก้อนแรกของเดือน (entry point เมื่อไม่มีก้อนเปิดอยู่) ──
+async function showOpenFirstKonDialog(){
+  if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
+  if(!currentPeriod){ showToast('ไม่พบงวดเดือนนี้','error'); return; }
+
+  // หา konNumber ถัดไป: max ของก้อนที่มีอยู่แล้ว (ทั้ง open/closed) + 1
+  const {data:kons}=await sb.from('petty_cash_kon')
+    .select('kon_number')
+    .eq('period_id',currentPeriod.id)
+    .order('kon_number',{ascending:false})
+    .limit(1);
+  const nextKon=((kons&&kons.length>0)?kons[0].kon_number:0)+1;
+
+  const ob=parseFloat(currentPeriod.open_bal)||0;
+  const netAmt=(20000+ob).toFixed(2);
+
+  const existing=document.getElementById('openFirstKonModal');
+  if(existing) existing.remove();
+
+  const modal=document.createElement('div');
+  modal.id='openFirstKonModal';
+  modal.className='modal-bg';
+  modal.style.display='flex';
+  modal.innerHTML=`
+    <div class="modal" style="max-width:360px;text-align:center">
+      <h3 style="margin-bottom:8px">➕ เปิดก้อน ${nextKon}</h3>
+      ${ob<-0.005?`
+      <div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:8px 12px;font-size:12.5px;color:#7a0000;margin-bottom:12px;line-height:1.6;text-align:left">
+        ⚠️ มียอดติดหนี้จากเดือนก่อน <strong>${fmt2(Math.abs(ob))} บาท</strong><br>
+        เบิก 20,000 → ใช้ได้จริงประมาณ <strong>${netAmt} บาท</strong>
+      </div>`:''}
+      ${ob>0.005?`
+      <div style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:8px;padding:8px 12px;font-size:12.5px;margin-bottom:12px;line-height:1.6;text-align:left">
+        💰 ยอดยกมาจากเดือนก่อน <strong>${fmt2(ob)} บาท</strong>
+      </div>`:''}
+      <div class="field" style="text-align:left">
+        <label>ยอดเบิก (บาท)</label>
+        <input id="firstKonAmount" type="number" value="20000"
+          style="text-align:center;font-size:18px;font-family:'IBM Plex Mono',monospace">
+      </div>
+      <div class="modal-btns">
+        <button class="btn-cancel-sm" id="btnCancelFirstKon">ยกเลิก</button>
+        <button class="btn btn-dark" id="btnConfirmFirstKon">เบิกก้อน ${nextKon} เลย</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(()=>document.getElementById('firstKonAmount')?.focus(),150);
+
+  document.getElementById('btnCancelFirstKon').onclick=()=>modal.remove();
+  document.getElementById('btnConfirmFirstKon').onclick=async()=>{
+    const amount=parseFloat(document.getElementById('firstKonAmount').value);
+    if(isNaN(amount)||amount<=0){ showToast('กรอกยอดเบิกให้ถูกต้อง','error'); return; }
+    modal.remove();
+    showLoading(true,`กำลังเปิดก้อน ${nextKon}...`);
+    try{
+      const openedBy=currentUser?.name||currentRole||'manager';
+      await openNewKon(currentPeriod.id, nextKon, amount, openedBy, bkkDate(new Date()));
+      await loadTransactions();
+      render();
+      showToast(`เปิดก้อน ${nextKon} สำเร็จ ✅`,'success');
+      try{
+        await sendTelegram(
+          `🔵 เปิดก้อน ${nextKon} แล้ว\n`+
+          `💰 วงเงิน: ${fmt2(amount)} บาท\n`+
+          (ob<-0.005?`⚠️ ยอดยกมา: -${fmt2(Math.abs(ob))} บาท\n`:'')+
+          `⏰ ${bkkDate(new Date())} · โดย: ${openedBy}`
+        );
+      }catch(_){}
+    }catch(e){
+      showToast(`❌ เปิดก้อนใหม่ไม่ได้: ${e.message}`,'error');
+    }
+    showLoading(false);
+  };
 }
 
 function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
