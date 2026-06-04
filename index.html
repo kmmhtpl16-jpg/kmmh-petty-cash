@@ -2600,6 +2600,7 @@ async function showOpenFirstKonDialog(){
       </div>
     </div>`;
   document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('open'));
   setTimeout(()=>document.getElementById('firstKonAmount')?.focus(),150);
 
   document.getElementById('btnCancelFirstKon').onclick=()=>modal.remove();
@@ -2654,6 +2655,7 @@ function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
       </div>
     </div>`;
   document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('open'));
 
   document.getElementById('btnOpenNextKon').onclick=async()=>{
     const amount=parseFloat(document.getElementById('nextKonAmount').value);
