@@ -470,7 +470,7 @@ tbody tr:hover td{background:#fafaf7}
     <p style="font-size:12.5px;color:#666;line-height:1.6;margin-bottom:.75rem">กรอกยอดเงินที่นับจริงในช่อง <strong>"นับเงินจริงได้"</strong> ด้านบน ระบบเปรียบเทียบให้อัตโนมัติ</p>
     <div class="rec-grid" id="recGrid"></div>
   </div>
-  <button class="btn btn-amber no-print" onclick="openCloseMonthModal()" style="margin:.75rem 0;display:block;width:100%;font-size:15px;padding:12px">🔒 ปิดก้อนนี้ + นับเงิน</button>
+  <div id="closeKonArea" style="margin:.75rem 0"></div>
   <div class="sum-box">
     <div class="sum-head">ประวัติการปิดวงเงิน</div>
     <div id="countHistory"></div>
@@ -725,12 +725,12 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 </div>
 
-<!-- ─── CLOSE MONTH MODAL ─── -->
+<!-- ─── SUBMIT KON MODAL (พนักงานยื่นขอปิดก้อน) ─── -->
 <div class="modal-bg" id="closeMonthModal">
 <div class="modal">
-  <h2>🔒 ปิดก้อนเงิน</h2>
-  <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#7a5500;margin-bottom:1rem;line-height:1.7">
-    ⚠️ กรอกยอดเงินนับจริงในกล่อง แล้วกด <strong>ปิดก้อนนี้</strong> — ระบบจะบันทึกและถามว่าจะเบิกก้อนใหม่เลยไหม
+  <h2>📋 ยื่นขอปิดก้อนเงิน</h2>
+  <div style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:12.5px;color:#1a5276;margin-bottom:1rem;line-height:1.7">
+    📌 กรอกยอดนับจริง แล้วกด <strong>"ยื่นขอปิดก้อน"</strong> — ระบบจะแจ้งผู้ตรวจสอบผ่าน Telegram
   </div>
   <p id="closeDateDisplay" style="font-size:12px;color:#888;margin-bottom:8px;font-style:italic"></p>
   <div class="field">
@@ -750,14 +750,31 @@ tbody tr:hover td{background:#fafaf7}
     <label style="font-size:12px;color:#b7770d;font-weight:600">❗ ยอดเบิกสำรอง (บาท) — ต้อง ≥ <span id="reserveMin"></span></label>
     <input type="number" id="reserveInput" min="0" step="0.01" style="width:100%;border:1px solid #b7770d;border-radius:6px;padding:6px 10px;margin-top:4px" oninput="previewCloseMonth()">
   </div>
-  <div class="mgr-pin-wrap">
-    <label>🔑 รหัสผู้จัดการ (Manager PIN) — จำเป็น</label>
-    <input type="password" id="cmMgrPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCmMgrPin()" autocomplete="off">
-    <div class="mgr-pin-status" id="cmMgrPinStatus"></div>
-  </div>
   <div class="modal-btns">
     <button class="btn-cancel-sm" onclick="closeModal('closeMonthModal')">ยกเลิก</button>
-    <button class="btn btn-dark btn-save" id="btnSaveCloseMonth" onclick="closeKon()" disabled style="opacity:.4;cursor:not-allowed">🔒 รอรหัสผู้จัดการ</button>
+    <button class="btn btn-dark btn-save" id="btnSubmitKon" onclick="submitKonForReview()">📨 ยื่นขอปิดก้อน</button>
+  </div>
+</div>
+</div>
+
+<!-- ─── REVIEWER MODAL (ผู้ตรวจสอบ/ผู้จัดการยืนยัน) ─── -->
+<div class="modal-bg" id="reviewKonModal">
+<div class="modal">
+  <h2 id="reviewModalTitle">🔍 ตรวจสอบการปิดก้อน</h2>
+  <div id="reviewKonSummary" style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.9;margin-bottom:1rem"></div>
+  <div class="mgr-pin-wrap">
+    <label id="reviewPinLabel">🔑 PIN ผู้ตรวจสอบ — จำเป็น</label>
+    <input type="password" id="reviewPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkReviewPin()" autocomplete="off">
+    <div class="mgr-pin-status" id="reviewPinStatus"></div>
+  </div>
+  <div class="field" id="rejectReasonRow" style="display:none">
+    <label style="color:var(--red)">❌ เหตุผลที่ส่งกลับแก้ไข</label>
+    <textarea id="rejectReason" placeholder="ระบุเหตุผลที่ต้องการให้แก้ไข..."></textarea>
+  </div>
+  <div class="modal-btns">
+    <button class="btn-cancel-sm" onclick="closeModal('reviewKonModal')">ปิด</button>
+    <button class="btn" id="btnRejectKon" onclick="toggleRejectReason()" disabled style="opacity:.4;background:var(--red);color:#fff">↩ ส่งกลับแก้ไข</button>
+    <button class="btn btn-dark btn-save" id="btnConfirmReview" onclick="confirmReview()" disabled style="opacity:.4;cursor:not-allowed">✅ ยืนยัน</button>
   </div>
 </div>
 </div>
@@ -1129,7 +1146,7 @@ async function loadCurrentKon(){
     const {data}=await sb.from('petty_cash_kon')
       .select('*')
       .eq('period_id',currentPeriod.id)
-      .eq('status','open')
+      .in('status',['open','pending_review','pending_approve','rejected'])
       .order('kon_number',{ascending:false})
       .limit(1);
     currentOpenKon=(data&&data.length>0)?data[0]:null;
@@ -1307,7 +1324,7 @@ function render(){
   pact.innerHTML='';  // ลบปุ่ม "ปิดยอดเดือนนี้" (ชื่อหลอก + เรียก closeKon ซ้ำกับแท็บปิดก้อน) — ปิดก้อนผ่านแท็บ "ปิดก้อน/ตรวจนับ" เท่านั้น
   renderAlerts(); renderCards(); renderDiff(); renderTable();
   if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
-  if(document.getElementById('view-reconcile').style.display!=='none'){ renderReconcile(); renderCountHistory(); }
+  if(document.getElementById('view-reconcile').style.display!=='none'){ renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
   if(document.getElementById('view-audit').style.display!=='none') renderAudit();
   if(document.getElementById('view-count').style.display!=='none') renderCountHistory();
 }
@@ -1630,7 +1647,7 @@ function switchTab(v){
     el.classList.toggle('on',NAV[i]===v);
   });
   if(v==='summary') renderSummary();
-  if(v==='reconcile'){ renderReconcile(); renderCountHistory(); }
+  if(v==='reconcile'){ renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
   if(v==='audit') renderAudit();
 }
 
@@ -2282,34 +2299,50 @@ function showLightboxTx(id){
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
 
 // ══════════════════════════════════════════════
-// CLOSE MONTH
+// CLOSE KON — 3-TIER APPROVAL FLOW
+// พนักงาน → submit → reviewer ยืนยัน → manager อนุมัติ → ปิดจริง
 // ══════════════════════════════════════════════
+
+// ── render ปุ่มในแท็บ reconcile ตาม status ก้อนปัจจุบัน ──
+function renderCloseKonArea(){
+  const el=document.getElementById('closeKonArea');
+  if(!el) return;
+  const kon=currentOpenKon;
+  if(!kon){ el.innerHTML=''; return; }
+  let h='';
+  if(kon.status==='open'){
+    h='<button class="btn btn-amber no-print" onclick="openCloseMonthModal()" style="display:block;width:100%;font-size:15px;padding:12px">📋 ยื่นขอปิดก้อนนี้</button>';
+  } else if(kon.status==='pending_review'){
+    const sat=kon.submitted_at?new Date(kon.submitted_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'—';
+    h='<div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;line-height:1.8">⏳ <strong>รอผู้ตรวจสอบยืนยัน</strong><br>'
+     +'<span style="font-size:12px;color:#7a5500">ยื่นโดย: '+(kon.submitted_by||'—')+' · '+sat+'</span></div>';
+    if(currentRole==='auditor'||currentRole==='manager')
+      h+='<button class="btn btn-dark no-print" onclick="openReviewModal(\'review\')" style="display:block;width:100%;font-size:15px;padding:12px">🔍 ตรวจสอบและยืนยัน</button>';
+  } else if(kon.status==='pending_approve'){
+    const rat=kon.reviewed_at?new Date(kon.reviewed_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'—';
+    h='<div style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;line-height:1.8">🔍 <strong>ผ่านการตรวจสอบแล้ว — รอผู้จัดการอนุมัติ</strong><br>'
+     +'<span style="font-size:12px;color:var(--green)">ตรวจโดย: '+(kon.reviewed_by||'—')+' · '+rat+'</span></div>';
+    if(currentRole==='manager')
+      h+='<button class="btn btn-dark no-print" onclick="openReviewModal(\'approve\')" style="display:block;width:100%;font-size:15px;padding:12px">✅ อนุมัติและปิดก้อน</button>';
+  } else if(kon.status==='rejected'){
+    h='<div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;line-height:1.8">↩ <strong>ถูกส่งกลับแก้ไข</strong><br>'
+     +'<span style="font-size:12px;color:var(--red)">เหตุผล: '+(kon.rejection_reason||'—')+'</span></div>'
+     +'<button class="btn btn-amber no-print" onclick="reopenKonForEdit()" style="display:block;width:100%;font-size:15px;padding:12px">✏️ แก้ไขและยื่นใหม่</button>';
+  }
+  el.innerHTML=h;
+}
 async function openCloseMonthModal(){
-  if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
-  // Bug #2 — บังคับปิดตามลำดับก้อน: ห้ามปิดยอดถ้ายังมีก้อนก่อนหน้าที่ยังไม่ล็อก
-  try{
-    const curNo=parseInt(currentPeriod?.period_no)||0;
-    const {data:prevUnlocked}=await sb.from('petty_cash_periods')
-      .select('period_no,is_locked').lt('period_no',curNo).eq('is_locked',false)
-      .order('period_no',{ascending:true}).limit(1);
-    if(prevUnlocked&&prevUnlocked.length>0){
-      showToast('กรุณาปิดวงเงินก้อนที่ '+prevUnlocked[0].period_no+' ก่อน','error');
-      return;
-    }
-  }catch(e){ console.error('sequence check failed',e); showToast('ตรวจสอบลำดับก้อนไม่สำเร็จ: '+e.message,'error'); return; }
+  if(!currentPeriod){ showToast('ไม่พบงวดเดือนนี้','error'); return; }
+  if(!currentOpenKon||currentOpenKon.status!=='open'){ showToast('ไม่พบก้อนที่เปิดอยู่','error'); return; }
   const cl=closing();
   const lcd=lastTxDate();
   const closeDateEl=document.getElementById('closeDateDisplay');
-  if(closeDateEl){ closeDateEl.textContent='วันที่ปดวงเงินที่ระบบจะบันทึก: '+lcd; }
+  if(closeDateEl) closeDateEl.textContent='วันที่ปิดวงเงินที่ระบบจะบันทึก: '+lcd;
   document.getElementById('cmBook').value=cl;
   document.getElementById('cmActual').value=actualCash||'';
   document.getElementById('cmNote').value='';
-  document.getElementById('cmMgrPin').value='';
-  document.getElementById('cmMgrPinStatus').textContent='';
-  const btn=document.getElementById('btnSaveCloseMonth');
-  btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
-  previewCloseMonth();
   document.getElementById('reserveRow').style.display='none';
+  previewCloseMonth();
   openModal('closeMonthModal');
   setTimeout(()=>document.getElementById('cmActual').focus(),200);
 }
@@ -2324,37 +2357,318 @@ function previewCloseMonth(){
     <div style="background:${cls==='ok'?'var(--green-bg)':'var(--red-bg)'};border:1px solid ${cls==='ok'?'var(--green-border)':'var(--red-border)'};border-radius:8px;padding:10px 14px;font-size:13px;margin:.5rem 0;line-height:1.8">
       <div style="display:flex;justify-content:space-between"><span>ยอดตามบัญชี</span><span class="mono">${fmt2(book)} บาท</span></div>
       <div style="display:flex;justify-content:space-between"><span>นับจริงได้</span><span class="mono">${fmt2(actual)} บาท</span></div>
-      <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:4px"><span>ผลต่าง</span><span class="mono" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">${Math.abs(diff)<0.005?'ตรง ✅':diff<0?`ขาด ${fmt2(Math.abs(diff))} บาท`:`เกิน ${fmt2(diff)} บาท`}</span></div>
+      <div style="display:flex;justify-content:space-between;font-weight:700;margin-top:4px"><span>ผลต่าง</span><span class="mono" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">
+        ${Math.abs(diff)<0.005?'ตรง ✅':diff<0?('ขาด '+fmt2(Math.abs(diff))+' บาท'):('เกิน '+fmt2(diff)+' บาท')}
+      </span></div>
     </div>`;
 }
 
-async function checkCmMgrPin(){
-  const val=document.getElementById('cmMgrPin').value;
-  const btn=document.getElementById('btnSaveCloseMonth');
-  const status=document.getElementById('cmMgrPinStatus');
-  if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ'; status.textContent=''; return; }
-  // ตรวจ PIN ผ่าน Supabase — ดึงเฉพาะ role ไม่ select *
+// พนักงานกด "ยื่นขอปิดก้อน"
+async function submitKonForReview(){
+  if(!currentOpenKon||currentOpenKon.status!=='open'){ showToast('ไม่พบก้อนที่เปิดอยู่','error'); return; }
+  const actual=parseFloat(document.getElementById('cmActual').value);
+  const note=(document.getElementById('cmNote').value||'').trim();
+  if(isNaN(actual)||actual<0){ showToast('กรอกยอดเงินนับจริงให้ถูกต้อง','error'); return; }
+
+  const bookClosing=konClosing(currentOpenKon.kon_number, currentOpenKon.open_bal);
+  const diff=actual-bookClosing;
+  if(Math.abs(diff)>0.005 && !note){ showToast('ยอดนับไม่ตรงบัญชี — กรอกหมายเหตุด้วย','error'); document.getElementById('cmNote')?.focus(); return; }
+
+  let reserve=0;
+  if(bookClosing<-0.005){
+    const reserveRow=document.getElementById('reserveRow');
+    const reserveInput=document.getElementById('reserveInput');
+    const reserveMin=document.getElementById('reserveMin');
+    if(!reserveRow||reserveRow.style.display==='none'){
+      if(reserveMin) reserveMin.textContent=fmt2(Math.abs(bookClosing));
+      if(reserveRow) reserveRow.style.display='block';
+      if(reserveInput){reserveInput.value='';reserveInput.focus();}
+      return;
+    }
+    reserve=parseFloat(reserveInput?.value);
+    if(isNaN(reserve)||reserve<Math.abs(bookClosing)-0.005){
+      showToast(`reserve ต้องไม่น้อยกว่า ${fmt2(Math.abs(bookClosing))} บาท`,'error'); return;
+    }
+  }
+
+  const submittedBy=currentUser?.name||currentRole||'staff';
+  const konTxDates=transactions.filter(t=>t.kon_number===currentOpenKon.kon_number).map(t=>t.tx_date).filter(Boolean).sort();
+  const closeTxDate=konTxDates.at(-1)||bkkDate(new Date());
+
+  showLoading(true,'กำลังยื่นขอปิดก้อน...');
+  try{
+    const {error}=await sb.from('petty_cash_kon').update({
+      status:'pending_review',
+      submitted_at:new Date().toISOString(),
+      submitted_by:submittedBy,
+      actual_cash:actual,
+      reserve_amount:reserve,
+      close_note:note||null
+    }).eq('id',currentOpenKon.id).eq('status','open');
+    if(error) throw new Error(error.message);
+  }catch(e){
+    showLoading(false);
+    showToast('❌ ยื่นขอปิดก้อนไม่สำเร็จ: '+e.message,'error');
+    return;
+  }
+  showLoading(false);
+  closeModal('closeMonthModal');
+  await loadCurrentKon();
+  render();
+  renderCloseKonArea();
+  try{
+    await sendTelegram(
+      `📋 ขอปิดก้อน ${currentOpenKon?.kon_number||'?'}\n`+
+      `💰 ยอดบัญชี: ${fmt2(konClosing(currentOpenKon?.kon_number,currentOpenKon?.open_bal))} บาท\n`+
+      `📥 นับจริง: ${fmt2(actual)} บาท\n`+
+      (reserve>0?`🏦 สำรอง: ${fmt2(reserve)} บาท\n`:'')+
+      `👤 ยื่นโดย: ${submittedBy}\n`+
+      `⏰ ${bkkDate(new Date())}\n`+
+      `👉 รอผู้ตรวจสอบยืนยันในแอป`
+    );
+  }catch(_){}
+  showToast('📨 ยื่นขอปิดก้อนเรียบร้อย — รอผู้ตรวจสอบยืนยัน','ok');
+}
+
+// ── เปิด modal ผู้ตรวจสอบ/ผู้จัดการ ──
+let _reviewMode='review'; // 'review' หรือ 'approve'
+async function openReviewModal(mode){
+  _reviewMode=mode;
+  const kon=currentOpenKon;
+  if(!kon){ showToast('ไม่พบก้อนที่รอตรวจ','error'); return; }
+
+  const isApprove=mode==='approve';
+  document.getElementById('reviewModalTitle').textContent=isApprove?'✅ อนุมัติการปิดก้อน':'🔍 ตรวจสอบการปิดก้อน';
+  document.getElementById('reviewPinLabel').textContent=isApprove?'🔑 PIN ผู้จัดการ — จำเป็น':'🔑 PIN ผู้ตรวจสอบ — จำเป็น';
+  document.getElementById('reviewPin').value='';
+  document.getElementById('reviewPinStatus').textContent='';
+  document.getElementById('rejectReasonRow').style.display='none';
+  document.getElementById('rejectReason').value='';
+  const btnConfirm=document.getElementById('btnConfirmReview');
+  const btnReject=document.getElementById('btnRejectKon');
+  btnConfirm.disabled=true; btnConfirm.style.opacity='.4';
+  btnConfirm.textContent=isApprove?'✅ อนุมัติและปิดก้อน':'✅ ยืนยันผ่านตรวจ';
+  btnReject.disabled=true; btnReject.style.opacity='.4';
+  btnReject.textContent=isApprove?'↩ ส่งกลับผู้ตรวจสอบ':'↩ ส่งกลับแก้ไข';
+
+  const actual=kon.actual_cash||0;
+  const bookCl=konClosing(kon.kon_number,kon.open_bal);
+  const diff=actual-bookCl;
+  document.getElementById('reviewKonSummary').innerHTML=`
+    <div style="font-weight:700;margin-bottom:6px">ก้อน ${kon.kon_number} — ยื่นโดย ${kon.submitted_by||'—'}</div>
+    <div style="display:flex;justify-content:space-between"><span>ยอดตามบัญชี</span><span class="mono">${fmt2(bookCl)} บาท</span></div>
+    <div style="display:flex;justify-content:space-between"><span>นับจริง</span><span class="mono">${fmt2(actual)} บาท</span></div>
+    <div style="display:flex;justify-content:space-between;font-weight:700"><span>ผลต่าง</span><span class="mono" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">
+      ${Math.abs(diff)<0.005?'ตรง ✅':diff<0?('ขาด '+fmt2(Math.abs(diff))+' บาท'):('เกิน '+fmt2(diff)+' บาท')}
+    </span></div>
+    ${(kon.reserve_amount||0)>0?`<div style="display:flex;justify-content:space-between"><span>เงินสำรอง</span><span class="mono">${fmt2(kon.reserve_amount)} บาท</span></div>`:''}
+    ${kon.close_note?`<div style="margin-top:6px;font-size:12px;color:#7a5500">📝 หมายเหตุ: ${kon.close_note}</div>`:''}
+  `;
+  openModal('reviewKonModal');
+}
+
+async function checkReviewPin(){
+  const val=document.getElementById('reviewPin').value;
+  const btnConfirm=document.getElementById('btnConfirmReview');
+  const btnReject=document.getElementById('btnRejectKon');
+  const status=document.getElementById('reviewPinStatus');
+  if(val.length<4){
+    btnConfirm.disabled=true; btnConfirm.style.opacity='.4';
+    btnReject.disabled=true; btnReject.style.opacity='.4';
+    status.textContent=''; return;
+  }
+  const role=_reviewMode==='approve'?'manager':'auditor';
+  // manager สามารถข้ามขั้น review ได้
+  const roles=_reviewMode==='review'?['auditor','manager']:['manager'];
   try{
     const {data}=await sb.from('petty_cash_users')
-      .select('id,name,role')
-      .eq('pin_value',val)
-      .eq('role','manager')
-      .eq('is_active',true)
-      .maybeSingle();
+      .select('id,name,role').eq('pin_value',val).in('role',roles).eq('is_active',true).maybeSingle();
     if(data){
-      btn.disabled=false; btn.style.opacity='1';
-      btn.textContent=`✅ ปิดก้อนนี้ (${data.name||'Manager'})`;
-      status.textContent=`✅ ยืนยันตัวตนแล้ว: ${data.name||'Manager'}`; status.style.color='var(--green)';
-      btn._confirmedMgrId=data.id;
-      btn._confirmedMgrName=data.name||'Manager';
+      btnConfirm.disabled=false; btnConfirm.style.opacity='1';
+      btnReject.disabled=false; btnReject.style.opacity='1';
+      status.textContent=`✅ ${data.name||data.role}`; status.style.color='var(--green)';
+      btnConfirm._confirmedUser=data;
     } else {
-      btn.disabled=true; btn.style.opacity='.4'; btn.textContent='🔒 รอรหัสผู้จัดการ';
+      btnConfirm.disabled=true; btnConfirm.style.opacity='.4';
+      btnReject.disabled=true; btnReject.style.opacity='.4';
       status.textContent='❌ รหัสไม่ถูกต้อง'; status.style.color='var(--red)';
-      document.getElementById('cmMgrPin').value='';
-      btn._confirmedMgrId=null; btn._confirmedMgrName=null;
+      document.getElementById('reviewPin').value='';
+      btnConfirm._confirmedUser=null;
     }
   }catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
 }
+
+function toggleRejectReason(){
+  const row=document.getElementById('rejectReasonRow');
+  const shown=row.style.display!=='none';
+  row.style.display=shown?'none':'block';
+  if(!shown) document.getElementById('rejectReason').focus();
+}
+
+async function confirmReview(){
+  const btn=document.getElementById('btnConfirmReview');
+  const user=btn._confirmedUser;
+  if(!user){ showToast('ยืนยัน PIN ก่อน','error'); return; }
+  const kon=currentOpenKon;
+  if(!kon){ showToast('ไม่พบก้อน','error'); return; }
+
+  // เช็คว่ามีการกด reject ค้างอยู่ไหม
+  const rejectRow=document.getElementById('rejectReasonRow');
+  if(rejectRow.style.display!=='none'){
+    await doRejectKon(user,kon); return;
+  }
+
+  if(_reviewMode==='review'){
+    // ผู้ตรวจสอบยืนยัน → pending_approve
+    showLoading(true,'กำลังยืนยัน...');
+    try{
+      const {error}=await sb.from('petty_cash_kon').update({
+        status:'pending_approve',
+        reviewed_at:new Date().toISOString(),
+        reviewed_by:user.name||user.role
+      }).eq('id',kon.id).eq('status','pending_review');
+      if(error) throw new Error(error.message);
+    }catch(e){ showLoading(false); showToast('❌ '+e.message,'error'); return; }
+    showLoading(false);
+    closeModal('reviewKonModal');
+    await loadCurrentKon(); render(); renderCloseKonArea();
+    try{
+      await sendTelegram(
+        `🔍 ก้อน ${kon.kon_number} ผ่านตรวจสอบแล้ว\n`+
+        `👤 ตรวจโดย: ${user.name||user.role}\n`+
+        `⏰ ${bkkDate(new Date())}\n`+
+        `👉 รอผู้จัดการอนุมัติในแอป`
+      );
+    }catch(_){}
+    showToast('🔍 ยืนยันผ่านตรวจสอบแล้ว — รอผู้จัดการอนุมัติ','ok');
+
+  } else {
+    // ผู้จัดการอนุมัติ → ปิดก้อนจริง
+    await doApproveKon(user,kon);
+  }
+}
+
+async function doRejectKon(user,kon){
+  const reason=(document.getElementById('rejectReason').value||'').trim();
+  if(!reason){ showToast('ระบุเหตุผลที่ส่งกลับด้วย','error'); return; }
+  showLoading(true,'กำลังส่งกลับ...');
+  try{
+    const {error}=await sb.from('petty_cash_kon').update({
+      status:'rejected',
+      rejection_reason:reason
+    }).eq('id',kon.id);
+    if(error) throw new Error(error.message);
+  }catch(e){ showLoading(false); showToast('❌ '+e.message,'error'); return; }
+  showLoading(false);
+  closeModal('reviewKonModal');
+  await loadCurrentKon(); render(); renderCloseKonArea();
+  try{
+    await sendTelegram(
+      `↩ ก้อน ${kon.kon_number} ถูกส่งกลับแก้ไข\n`+
+      `👤 โดย: ${user.name||user.role}\n`+
+      `📝 เหตุผล: ${reason}\n`+
+      `⏰ ${bkkDate(new Date())}\n`+
+      `👉 พนักงานแก้ไขและยื่นใหม่`
+    );
+  }catch(_){}
+  showToast('↩ ส่งกลับแก้ไขแล้ว','ok');
+}
+
+async function reopenKonForEdit(){
+  if(!currentOpenKon||currentOpenKon.status!=='rejected'){ showToast('ไม่พบก้อนที่ถูกส่งกลับ','error'); return; }
+  showLoading(true,'กำลังเปิดให้แก้ไข...');
+  try{
+    const {error}=await sb.from('petty_cash_kon').update({
+      status:'open', rejection_reason:null
+    }).eq('id',currentOpenKon.id).eq('status','rejected');
+    if(error) throw new Error(error.message);
+  }catch(e){ showLoading(false); showToast('❌ '+e.message,'error'); return; }
+  showLoading(false);
+  await loadCurrentKon(); render(); renderCloseKonArea();
+  showToast('✏️ เปิดให้แก้ไขแล้ว — ยื่นใหม่ได้เลย','ok');
+}
+
+async function doApproveKon(user,kon){
+  const actual=kon.actual_cash||0;
+  const reserve=kon.reserve_amount||0;
+  const closedBy=user.name||user.role;
+  const konTxDates=transactions.filter(t=>t.kon_number===kon.kon_number).map(t=>t.tx_date).filter(Boolean).sort();
+  const closeTxDate=konTxDates.at(-1)||bkkDate(new Date());
+
+  showLoading(true,'กำลังปิดก้อน...');
+  let result;
+  try{
+    const {data,error}=await sb.rpc('close_kon',{
+      p_kon_id:kon.id, p_actual_cash:actual,
+      p_reserve:reserve, p_closed_by:closedBy,
+      p_tx_date:closeTxDate
+    });
+    if(error) throw new Error(error.message);
+    result=data;
+  }catch(e){
+    showLoading(false);
+    showToast(`❌ ปิดก้อนล้มเหลว: ${e.message}`,'error');
+    try{
+      await sendTelegram(
+        `🔴 ปิดก้อน ${kon.kon_number} ล้มเหลว\n`+
+        `❌ สาเหตุ: ${e.message}\n`+
+        `📌 สถานะ: ยกเลิกทั้งหมด ก้อนยังเปิดอยู่\n`+
+        `⏰ ${bkkDate(new Date())} · โดย: ${closedBy}`
+      );
+    }catch(_){}
+    return;
+  }
+
+  if(kon.close_note){
+    try{
+      const bookClosing=konClosing(kon.kon_number,kon.open_bal);
+      await sb.from('petty_cash_counts').insert({
+        period_id:currentPeriod.id, bal_book:bookClosing,
+        bal_real:actual, diff:actual-bookClosing, note:kon.close_note,
+        by_role:currentRole, by_name:closedBy
+      });
+    }catch(_){}
+  }
+
+  await addAudit('edit',
+    `ปิดก้อน ${result.kon_number} | บัญชี: ${fmt2(result.closing_calc)} | นับ: ${fmt2(actual)} | reserve: ${fmt2(reserve)} | โดย: ${closedBy}`
+  );
+
+  showLoading(false);
+  try{
+    await sendTelegram(
+      `🟢 ปิดก้อน ${result.kon_number} เรียบร้อย\n`+
+      `💰 ยอดปิด: ${fmt2(result.close_bal)} บาท\n`+
+      `📥 รับ: ${fmt2(result.total_inc)} | 📤 จ่าย: ${fmt2(result.total_exp)}\n`+
+      (reserve>0?`🏦 สำรอง: ${fmt2(reserve)} บาท\n`:'')+
+      `✅ อนุมัติโดย: ${closedBy}\n`+
+      `⏰ ${result.closed_at}`
+    );
+  }catch(_){}
+
+  closeModal('reviewKonModal');
+  await loadTransactions();
+  await loadCurrentKon();
+  render();
+  renderCloseKonArea();
+  showOpenNextKonDialog(result,closedBy,closeTxDate);
+}
+
+// ── checkCmMgrPin ยังคงไว้ (ใช้ที่อื่น) แต่ไม่ใช้กับ closeKon แล้ว ──
+async function checkCmMgrPin(){
+  const val=document.getElementById('cmMgrPin')?.value;
+  const btn=document.getElementById('btnSaveCloseMonth');
+  const status=document.getElementById('cmMgrPinStatus');
+  if(!val||val.length<4){ if(btn){btn.disabled=true;btn.style.opacity='.4';} if(status)status.textContent=''; return; }
+  try{
+    const {data}=await sb.from('petty_cash_users')
+      .select('id,name,role').eq('pin_value',val).eq('role','manager').eq('is_active',true).maybeSingle();
+    if(data&&btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent=`✅ ปิดก้อนนี้ (${data.name||'Manager'})`; if(status){status.textContent=`✅ ${data.name}`; status.style.color='var(--green)';} btn._confirmedMgrId=data.id; btn._confirmedMgrName=data.name||'Manager'; }
+    else { if(btn){btn.disabled=true;btn.style.opacity='.4';} if(status){status.textContent='❌ รหัสไม่ถูกต้อง';status.style.color='var(--red)';} if(document.getElementById('cmMgrPin'))document.getElementById('cmMgrPin').value=''; }
+  }catch(e){ if(status){status.textContent='❌ '+e.message;status.style.color='var(--red)';} }
+}
+
+
 
 // ═══════════════════════════════════════════════════════════
 // KMMH Petty Cash v5 — ปิดก้อน (atomic via RPC close_kon)
@@ -2386,6 +2700,19 @@ async function getOpenKon(){
     .limit(1)
     .single();
   if(error) throw new Error('ไม่พบก้อนที่เปิดอยู่: '+error.message);
+  return data;
+}
+
+// ── ดึงก้อนที่รอตรวจ/รออนุมัติ ──
+async function getPendingKon(){
+  const {data,error}=await sb.from('petty_cash_kon')
+    .select('*')
+    .eq('period_id',currentPeriod.id)
+    .in('status',['pending_review','pending_approve'])
+    .order('kon_number',{ascending:false})
+    .limit(1)
+    .maybeSingle();
+  if(error) throw new Error('ดึงก้อนรอตรวจไม่ได้: '+error.message);
   return data;
 }
 
@@ -2435,124 +2762,6 @@ async function openNewKon(periodId,konNumber,openBal,openedBy,openDate){
   return { debtFromPrev };
 }
 
-async function closeKon(){
-  const btn=document.getElementById('btnSaveCloseMonth');
-  if(btn) btn.disabled=true;
-
-  const actual=parseFloat(document.getElementById('cmActual').value);
-  const note=(document.getElementById('cmNote').value||'').trim();
-  if(isNaN(actual)||actual<0){
-    showToast('กรอกยอดเงินนับจริงให้ถูกต้อง','error');
-    if(btn) btn.disabled=false;
-    return;
-  }
-
-  const closedBy=btn?._confirmedMgrName||currentUser?.name||currentRole||'manager';
-
-  let kon;
-  try{ kon=await getOpenKon(); }
-  catch(e){ showToast(e.message,'error'); if(btn)btn.disabled=false; return; }
-
-  // วันที่ปิด = วันล่าสุดที่คีย์ในก้อนนี้ (ตรงเอกสาร) — ไม่ใช่วันนี้
-  const konTxDates = transactions.filter(t=>t.kon_number===kon.kon_number).map(t=>t.tx_date).filter(Boolean).sort();
-  const closeTxDate = konTxDates.at(-1) || bkkDate(new Date());
-
-  const bookClosing=konClosing(kon.kon_number, kon.open_bal);
-  const diff=actual-bookClosing;
-  if(Math.abs(diff)>0.005 && !note){
-    showToast('ยอดนับไม่ตรงบัญชี — กรอกหมายเหตุด้วย','error');
-    document.getElementById('cmNote')?.focus();
-    if(btn)btn.disabled=false;
-    return;
-  }
-
-  let reserve=0;
-  if(bookClosing<-0.005){
-    const reserveInput=document.getElementById('reserveInput');
-    const reserveRow=document.getElementById('reserveRow');
-    const reserveMin=document.getElementById('reserveMin');
-    if(!reserveRow||reserveRow.style.display==='none'){
-      if(reserveMin) reserveMin.textContent=fmt2(Math.abs(bookClosing));
-      if(reserveRow) reserveRow.style.display='block';
-      if(reserveInput){reserveInput.value='';reserveInput.focus();}
-      if(btn)btn.disabled=false;
-      return;
-    }
-    reserve=parseFloat(reserveInput?.value);
-    if(isNaN(reserve)||reserve<Math.abs(bookClosing)-0.005){
-      showToast(`reserve ต้องไม่น้อยกว่า ${fmt2(Math.abs(bookClosing))} บาท`,'error');
-      if(btn)btn.disabled=false;
-      return;
-    }
-  }
-
-  const confirmMsg=
-    `ปิดก้อน ${kon.kon_number}\n`+
-    `ยอดตามบัญชี: ${fmt2(bookClosing)} บาท\n`+
-    `ยอดนับจริง:  ${fmt2(actual)} บาท\n`+
-    (reserve>0?`เงินสำรอง:    ${fmt2(reserve)} บาท\n`:'')+
-    `\nยืนยันปิดก้อนนี้?`;
-  if(!confirm(confirmMsg)){if(btn)btn.disabled=false;return;}
-
-  showLoading(true,'กำลังปิดก้อน...');
-  let result;
-  try{
-    const {data,error}=await sb.rpc('close_kon',{
-      p_kon_id:kon.id, p_actual_cash:actual,
-      p_reserve:reserve, p_closed_by:closedBy,
-      p_tx_date:closeTxDate
-    });
-    if(error) throw new Error(error.message);
-    result=data;
-  }catch(e){
-    showLoading(false);
-    showToast(`❌ ปิดก้อนล้มเหลว: ${e.message}`,'error');
-    try{
-      await sendTelegram(
-        `🔴 ปิดก้อน ${kon.kon_number} ล้มเหลว\n`+
-        `❌ สาเหตุ: ${e.message}\n`+
-        `📌 สถานะ: ยกเลิกทั้งหมด ก้อนยังเปิดอยู่\n`+
-        `⏰ ${bkkDate(new Date())} · โดย: ${closedBy}`
-      );
-    }catch(_){}
-    if(btn)btn.disabled=false;
-    return;
-  }
-
-  showLoading(false);
-
-  if(note){
-    try{
-      await sb.from('petty_cash_counts').insert({
-        period_id:currentPeriod.id, bal_book:bookClosing,
-        bal_real:actual, diff:diff, note:note,
-        by_role:currentRole, by_name:closedBy
-      });
-    }catch(cErr){ console.warn('บันทึก note ไม่ได้:',cErr.message); }
-  }
-
-  await addAudit('edit',
-    `ปิดก้อน ${result.kon_number} | บัญชี: ${fmt2(result.closing_calc)} | นับ: ${fmt2(actual)} | reserve: ${fmt2(reserve)} | โดย: ${closedBy}`
-  );
-
-  try{
-    await sendTelegram(
-      `🟢 ปิดก้อน ${result.kon_number} เรียบร้อย\n`+
-      `💰 ยอดปิด: ${fmt2(result.close_bal)} บาท\n`+
-      `📥 รับ: ${fmt2(result.total_inc)} | 📤 จ่าย: ${fmt2(result.total_exp)}\n`+
-      (reserve>0?`🏦 สำรอง: ${fmt2(reserve)} บาท\n`:'')+
-      `⏰ ${result.closed_at} · โดย: ${closedBy}`
-    );
-  }catch(_){}
-
-  await loadTransactions();
-  const rRow=document.getElementById('reserveRow');
-  if(rRow) rRow.style.display='none';
-  closeModal('closeMonthModal');
-  render();
-
-  showOpenNextKonDialog(result,closedBy,closeTxDate);
-}
 
 // ── เปิดก้อนแรกของเดือน (entry point เมื่อไม่มีก้อนเปิดอยู่) ──
 async function showOpenFirstKonDialog(){
@@ -3553,7 +3762,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{
+  ['formModal','closeMonthModal','reviewKonModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -3561,7 +3770,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','reviewKonModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
