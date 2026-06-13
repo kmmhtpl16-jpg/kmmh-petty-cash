@@ -1052,7 +1052,7 @@ async function enterApp(){
   showLoading(true,'กำลังโหลดข้อมูล...');
   await loadPeriodForMonth();
   // บันทึก audit หลัง period โหลดแล้ว พร้อมชื่อ+สิทธิ์พนักงาน
-  await addAudit('login',
+  addAudit('login',
     `เข้าสู่ระบบ | สิทธิ์: ${currentRole==='manager'?'ผู้จัดการ (Manager)':currentRole==='auditor'?'ผู้ตรวจสอบ (Auditor)':'พนักงาน (Cashier)'} | ชื่อ: ${currentUser.name||'(ไม่ระบุ)'}`
   );
   showLoading(false);
@@ -1117,10 +1117,14 @@ async function loadPeriodForMonth(){
     } else {
       currentPeriod=periods[0];
     }
-    await loadTransactions();
-    await loadCounts();
-    await loadAudit();
-    await loadWithdrawRequests();
+    // 🚀 ยิงทุกชุดข้อมูลพร้อมกัน (parallel)
+    await Promise.all([
+      loadTransactions(),
+      loadCurrentKon(),
+      loadCounts(),
+      loadAudit(),
+      loadWithdrawRequests()
+    ]);
     // Sync actualCash from latest count
     if(countRecords.length>0){
       actualCash=String(countRecords[0].bal_real);
@@ -1138,7 +1142,6 @@ async function loadTransactions(){
     .select('*').eq('period_id',currentPeriod.id)
     .order('tx_date',{ascending:true}).order('created_at',{ascending:true});
   transactions=data||[];
-  await loadCurrentKon();
 }
 async function loadCurrentKon(){
   if(!currentPeriod){ currentOpenKon=null; return; }
