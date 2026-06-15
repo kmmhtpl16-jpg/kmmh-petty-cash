@@ -1513,7 +1513,7 @@ function renderAudit(){
   auditLog.slice(0,100).forEach(a=>{
     const cls=a.action==='add'?'audit-add':a.action==='edit'?'audit-edit':a.action==='del'?'audit-del':'audit-lock';
     const label=a.action==='add'?'เพิ่ม':a.action==='edit'?'แก้ไข':a.action==='del'?'ลบ':a.action==='login'?'เข้าสู่ระบบ':'ล็อก';
-    const ts=a.logged_at?(a.logged_at.replace('T',' ').slice(0,16)):'—';
+    const ts=a.logged_at?(new Date(a.logged_at).toLocaleString('sv-SE',{timeZone:'Asia/Bangkok'}).slice(0,16)):'—';
     h+=`<div class="audit-item"><div class="audit-time">${ts}</div><div class="audit-txt">${a.description||a.action}</div><span class="audit-action ${cls}">${label}</span></div>`;
   });
   document.getElementById('auditList').innerHTML=h;
@@ -3108,7 +3108,7 @@ function exportXLSX(){
   s4+=eRow();
   s4+=row(cS('การกระทำ'),cS('รายละเอียด'),cS('โดย'),cS('เวลา'));
   if(!auditLog.length) s4+=row(cS('ยังไม่มีประวัติ'));
-  auditLog.forEach(a=>{ s4+=row(cS(a.action),cS(a.description||''),cS(a.by_name||a.by_role||''),cS(a.logged_at||'')); });
+  auditLog.forEach(a=>{ s4+=row(cS(a.action),cS(a.description||''),cS(a.by_name||a.by_role||''),cS((a.logged_at?new Date(a.logged_at).toLocaleString('sv-SE',{timeZone:'Asia/Bangkok'}).slice(0,16):''))); });
   const xml=`<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:x="urn:schemas-microsoft-com:office:excel">\n<Styles>\n  <Style ss:ID="sDefault"><Alignment ss:Vertical="Center" ss:WrapText="1"/><Font ss:FontName="Sarabun" ss:Size="10"/></Style>\n  <Style ss:ID="sTitle"><Font ss:FontName="Sarabun" ss:Size="12" ss:Bold="1"/><Interior ss:Color="#1a1a1a" ss:Pattern="Solid"/><Font ss:Color="#FFFFFF" ss:FontName="Sarabun" ss:Size="12" ss:Bold="1"/></Style>\n</Styles>\n<Worksheet ss:Name="รายการทั้งหมด"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="82"/><Column ss:Width="60"/><Column ss:Width="100"/><Column ss:Width="220"/><Column ss:Width="140"/><Column ss:Width="90"/><Column ss:Width="70"/>\n${s1}</Table></Worksheet>\n<Worksheet ss:Name="สรุปตามบัญชี"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="260"/><Column ss:Width="100"/><Column ss:Width="100"/>\n${s2}</Table></Worksheet>\n<Worksheet ss:Name="ประวัตินับเงิน"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="130"/><Column ss:Width="100"/><Column ss:Width="100"/><Column ss:Width="80"/><Column ss:Width="200"/><Column ss:Width="100"/>\n${s3}</Table></Worksheet>\n<Worksheet ss:Name="Audit Trail"><Table ss:DefaultColumnWidth="80" ss:DefaultRowHeight="18">\n<Column ss:Width="60"/><Column ss:Width="340"/><Column ss:Width="100"/><Column ss:Width="130"/>\n${s4}</Table></Worksheet>\n</Workbook>`;
   const blob=new Blob(['\uFEFF'+xml],{type:'application/vnd.ms-excel;charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -3189,7 +3189,7 @@ function exportAuditTXT(){
   const lines=[`KMMH — Audit Trail`,`เดือน: ${monthLabel()}`,`ส่งออกเมื่อ: ${nowStr()}`,`${'─'.repeat(60)}`,''];
   auditLog.forEach((a,i)=>{
     const label=a.action==='add'?'[เพิ่ม]':a.action==='edit'?'[แก้ไข]':a.action==='del'?'[ลบ]  ':a.action==='login'?'[เข้าสู่]':'[ล็อก]';
-    lines.push(`${String(i+1).padStart(4,'0')}  ${label}  ${a.logged_at||''}`);
+    lines.push(`${String(i+1).padStart(4,'0')}  ${label}  ${(a.logged_at?new Date(a.logged_at).toLocaleString('sv-SE',{timeZone:'Asia/Bangkok'}).slice(0,16):'')}`);
     lines.push(`      ${a.description||a.action}`);
     lines.push('');
   });
