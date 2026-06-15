@@ -1339,7 +1339,7 @@ function renderAlerts(){
   let h='';
   // ── banner เปิดก้อนแรก (โชว์เมื่อไม่มีก้อนเปิดอยู่ + ยังไม่ lock + เป็น manager) ──
   if(currentOpenKon===null && !currentPeriod.is_locked && currentRole==='manager'){
-    const ob=parseFloat(currentPeriod.open_bal)||0;
+    const ob=closing();
     const debtLine=ob<-0.005
       ?`<br><span style="font-size:12px">⚠️ มียอดติดหนี้จากเดือนก่อน <strong>${fmt2(Math.abs(ob))} บาท</strong> — เงินใช้ได้จริง ≈ ${fmt2(20000+ob)} บาท</span>`
       :(ob>0.005?`<br><span style="font-size:12px">💰 ยอดยกมา ${fmt2(ob)} บาท</span>`:'');
@@ -2782,7 +2782,7 @@ async function showOpenFirstKonDialog(){
     .limit(1);
   const nextKon=((kons&&kons.length>0)?kons[0].kon_number:0)+1;
 
-  const ob=parseFloat(currentPeriod.open_bal)||0;
+  const ob=closing();
   const netAmt=(20000+ob).toFixed(2);
 
   const existing=document.getElementById('openFirstKonModal');
