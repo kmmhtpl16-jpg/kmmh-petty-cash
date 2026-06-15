@@ -2760,7 +2760,7 @@ async function openNewKon(periodId,konNumber,openBal,openedBy,openDate){
 
   // 4. สร้าง row ก้อนใหม่
   const {error:konErr}=await sb.from('petty_cash_kon').insert({
-    period_id:periodId, kon_number:konNumber, open_bal:openBal,
+    period_id:periodId, kon_number:konNumber, open_bal:(konNumber===1?(parseFloat(currentPeriod?.open_bal)||0):parseFloat(((await sb.from('petty_cash_kon').select('close_bal').eq('period_id',periodId).eq('kon_number',konNumber-1).single()).data||{}).close_bal)||0),
     status:'open', opened_at:new Date().toISOString(), opened_by:openedBy
   });
   if(konErr) throw new Error('สร้างก้อนใหม่ไม่ได้: '+konErr.message);
