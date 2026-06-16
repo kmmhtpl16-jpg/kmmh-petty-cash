@@ -468,6 +468,25 @@ tbody tr:hover td{background:#fafaf7}
 
 <!-- ─── VIEW: RECONCILE ─── -->
 <div id="view-reconcile" style="display:none">
+  <!-- ─── นับเงินประจำวัน (เพิ่มใหม่) — บันทึกอย่างเดียว ไม่ปิดก้อน ─── -->
+  <div class="sum-box" id="dailyCountBox" style="border:2px solid var(--amber)">
+    <div class="sum-head">🧮 นับเงินวันนี้ — กรอกยอดที่นับได้จริงแล้วกดบันทึก (ไม่ปิดก้อน)</div>
+    <div style="padding:1rem">
+      <div id="dailyCountStatus" style="font-size:12.5px;color:var(--muted);margin-bottom:.6rem"></div>
+      <div style="display:flex;gap:16px;align-items:center;padding:12px;background:var(--bg);border-radius:10px;margin-bottom:12px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--muted)">ยอดตามบัญชี (ควรจะมี)</div><div style="font-size:20px;font-weight:700;color:var(--blue);font-family:'IBM Plex Mono',monospace" id="dailyCountBook">0.00</div></div>
+        <div style="font-size:20px;color:var(--border2)">vs</div>
+        <div><div style="font-size:11px;color:var(--muted)">นับจริงได้วันนี้</div><div style="font-size:20px;font-weight:700;color:var(--amber);font-family:'IBM Plex Mono',monospace" id="dailyCountReal">0.00</div></div>
+        <div style="margin-left:auto"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">ผลต่าง</div><div id="dailyCountDiff" class="diff-badge diff-ok">± 0.00</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <label style="font-size:13px;font-weight:600;align-self:center">นับเงินจริงได้ (บาท):</label>
+        <input type="number" id="dailyCountInput" min="0" placeholder="กรอกยอดที่นับได้จริง" oninput="previewDailyCount()" style="flex:1;min-width:160px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:16px;font-family:'IBM Plex Mono',monospace">
+        <button class="btn btn-dark" onclick="dailyCountSave()">✅ บันทึกการนับวันนี้</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:.6rem">บันทึกแล้วยอดจะขึ้นในรายงานสรุปเงินสดประจำวันทันที — ไม่ปิดก้อน ไม่สร้างคำขอเบิก นับซ้ำได้ ระบบจะใช้ยอดล่าสุดของวัน</div>
+    </div>
+  </div>
   <div class="rec-panel" id="recPanel">
     <div class="rec-title" id="recTitle">📋 ตรวจนับเงินสดย่อย</div>
     <p style="font-size:12.5px;color:#666;line-height:1.6;margin-bottom:.75rem">กรอกยอดเงินที่นับจริงในช่อง <strong>"นับเงินจริงได้"</strong> ด้านบน ระบบเปรียบเทียบให้อัตโนมัติ</p>
@@ -1653,7 +1672,7 @@ function switchTab(v){
     el.classList.toggle('on',NAV[i]===v);
   });
   if(v==='summary') renderSummary();
-  if(v==='reconcile'){ renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
+  if(v==='reconcile'){ renderDailyCount(); renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
   if(v==='audit') renderAudit();
 }
 
@@ -1884,6 +1903,71 @@ async function _saveCount(book,real,diff,note,auditorName,countDate){
     showToast(`บันทึกการนับเงินแล้ว (${Math.abs(diff)<0.005?'ยอดตรง':'ยอดต่าง '+fmt2(Math.abs(diff))+' บาท'})`,'success');
   }catch(e){ showToast('บันทึกล้มเหลว: '+e.message,'error'); }
   showLoading(false);
+}
+
+// ══════════════════════════════════════════════
+// นับเงินประจำวัน (Daily Count) — บันทึกอย่างเดียว ไม่ปิดก้อน ไม่เบิก
+// ══════════════════════════════════════════════
+function previewDailyCount(){
+  const book=closing();
+  const bEl=document.getElementById('dailyCountBook'); if(bEl) bEl.textContent=fmt2(book);
+  const inp=document.getElementById('dailyCountInput'); if(!inp) return;
+  const real=parseFloat(inp.value);
+  const has=!isNaN(real)&&inp.value!=='';
+  const rEl=document.getElementById('dailyCountReal'); if(rEl) rEl.textContent=fmt2(has?real:0);
+  const diff=has?(real-book):0;
+  const badge=document.getElementById('dailyCountDiff');
+  if(badge){ badge.textContent=(diff>=0?'+':'')+fmt2(diff);
+    badge.className='diff-badge '+(Math.abs(diff)<0.005?'diff-ok':Math.abs(diff)<200?'diff-warn':'diff-bad'); }
+}
+async function dailyCountSave(){
+  if(!currentPeriod){ showToast('ยังไม่ได้เปิดงวดเงินสดย่อย','error'); return; }
+  const inp=document.getElementById('dailyCountInput');
+  const real=parseFloat(inp.value);
+  if(isNaN(real)||inp.value===''){ showToast('กรุณากรอกยอดเงินที่นับได้จริง','error'); inp.focus(); return; }
+  if(real<0){ showToast('ยอดเงินติดลบไม่ได้','error'); return; }
+  const book=closing();
+  const diff=real-book;
+  const today=todayStr();
+  const diffTxt=Math.abs(diff)<0.005?'ยอดตรงพอดี':(diff>0?('เกิน '+fmt2(diff)+' บาท'):('ขาด '+fmt2(Math.abs(diff))+' บาท'));
+  if(!confirm('ยืนยันบันทึกการนับวันนี้?\n\nยอดตามบัญชี: '+fmt2(book)+' บาท\nนับจริงได้: '+fmt2(real)+' บาท\nผลต่าง: '+diffTxt+'\nวันที่: '+today)) return;
+  showLoading(true,'บันทึกการนับวันนี้...');
+  try{
+    const {error}=await sb.from('petty_cash_counts').insert({
+      period_id:currentPeriod.id,
+      bal_book:book,
+      bal_real:real,
+      diff,
+      note:'นับประจำวัน',
+      by_role:currentRole,
+      by_name:currentUser?.name||currentRole,
+      count_date:today
+    });
+    if(error) throw new Error(error.message);
+    await addAudit('add','นับเงินประจำวัน ('+today+'): บัญชี '+fmt2(book)+' บาท | จริง '+fmt2(real)+' บาท | ต่าง '+fmt2(diff)+' บาท | โดย '+(currentUser?.name||currentRole));
+    inp.value='';
+    await loadCounts();
+    renderDailyCount(); renderCountHistory(); renderReconcile();
+    showToast('บันทึกการนับวันนี้แล้ว ✅ ยอดจะขึ้นในรายงานประจำวัน','success');
+  }catch(e){ showToast('บันทึกล้มเหลว: '+e.message,'error'); }
+  showLoading(false);
+}
+function renderDailyCount(){
+  const st=document.getElementById('dailyCountStatus');
+  const today=todayStr();
+  const todays=(countRecords||[]).filter(c=>c.count_date===today)
+    .sort((a,b)=>(b.counted_at||'').localeCompare(a.counted_at||''));
+  if(st){
+    if(todays.length>0){
+      const last=todays[0];
+      st.innerHTML='✅ <b>วันนี้นับแล้ว</b> — นับจริง <b style="color:var(--amber)">'+fmt2(last.bal_real)+' บาท</b> (โดย '+(last.by_name||'-')+') · นับซ้ำได้ ระบบจะใช้ยอดล่าสุด';
+      st.style.color='var(--green)';
+    } else {
+      st.innerHTML='🔴 <b>วันนี้ยังไม่ได้นับ</b> — กรอกยอดที่นับได้จริงแล้วกดบันทึก';
+      st.style.color='var(--red)';
+    }
+  }
+  previewDailyCount();
 }
 
 // ══════════════════════════════════════════════
