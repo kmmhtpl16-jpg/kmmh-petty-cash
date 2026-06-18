@@ -1181,7 +1181,7 @@ async function loadCounts(){
   if(!currentPeriod) return;
   const {data}=await sb.from('petty_cash_counts')
     .select('*').eq('period_id',currentPeriod.id)
-    .order('count_date',{ascending:false});
+    .order('count_date',{ascending:false, nullsFirst: false });
   countRecords=data||[];
 }
 async function loadAudit(){
