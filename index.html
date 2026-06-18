@@ -2310,7 +2310,7 @@ async function saveEntry(){
       image_urls: allImageUrls.length ? JSON.stringify(allImageUrls) : null,
       by_role   : currentRole,
       by_name   : currentUser?.name || currentRole,
-      kon_number: transactions.filter(t => t.acc_code === '1111-30' && t.tx_type === 'income').length
+      kon_number: currentOpenKon ? currentOpenKon.kon_number : 1
     };
 
     // ── Step 3: Audit log พร้อม ชื่อ + สิทธิ์ ──
