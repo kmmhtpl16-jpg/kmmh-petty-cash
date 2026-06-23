@@ -3893,10 +3893,9 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 // ── Telegram Notification ─────────────────────────────────────────────
 
-// ส่งผ่าน Edge Function notify-telegram — token อยู่ฝั่ง server เท่านั้น
-// ไม่อ่าน bot token จาก DB อีกต่อไป (กัน anon ดึง token ผ่าน anon key)
-const TG_NOTIFY_URL = SUPABASE_URL + '/functions/v1/notify-telegram';
-const TG_CHAT_ID = '-5157444160'; // กลุ่มเงินสดย่อย KMMH (อยู่ใน allowlist ฝั่ง server)
+// ส่งผ่าน Edge Function pc-notify — bot token + ปลายทางอยู่ฝั่ง server เท่านั้น
+// (อ่านจาก petty_cash_settings ด้วย service role) ไม่อ่าน token จาก DB ฝั่ง client อีกต่อไป
+const TG_NOTIFY_URL = SUPABASE_URL + '/functions/v1/pc-notify';
 
 async function sendTelegram(message){
   try{
@@ -3907,7 +3906,7 @@ async function sendTelegram(message){
         'Authorization':'Bearer '+SUPABASE_KEY,
         'apikey':SUPABASE_KEY
       },
-      body:JSON.stringify({text:message,chat_id:TG_CHAT_ID,parse_mode:'HTML'})
+      body:JSON.stringify({text:message,parse_mode:'HTML'})
     });
   }catch(e){ console.warn('Telegram error:',e); }
 }
