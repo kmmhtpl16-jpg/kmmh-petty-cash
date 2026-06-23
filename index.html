@@ -1149,7 +1149,9 @@ async function loadPeriodForMonth(){
     ]);
     // Sync actualCash from latest count
     if(countRecords.length>0){
-      actualCash=String(countRecords[0].bal_real);
+      // ใช้ยอดนับล่าสุดจริง เรียงตาม counted_at — กันเรคคอร์ดตอนปิดก้อนที่ count_date=NULL ถูกหยิบมาเทียบผิด
+      const latestCount=countRecords.reduce((a,b)=> (new Date(b.counted_at) > new Date(a.counted_at) ? b : a));
+      actualCash=String(latestCount.bal_real);
     }
     document.getElementById('periodBar').style.display='flex';
   }catch(e){
