@@ -944,6 +944,7 @@ let countRecords = [];        // rows from petty_cash_counts
 let auditLog = [];           // rows from petty_cash_audit
 let actualCash = '';         // typed actual cash (not yet saved)
 let editTxId = null;         // uuid of tx being edited
+let editTxWasLocked = false; // true เมื่อผู้จัดการแก้รายการที่ถูกล็อก (สำหรับ audit)
 let pendingFiles = [];       // File objects รอ upload ไป Supabase Storage
 let pendingPreviews = [];    // blob URL สำหรับ preview เท่านั้น (ไม่เก็บ base64)
 let existingImageUrls = [];  // Public URL ของรูปเก่า (กรณี edit tx)
@@ -1428,11 +1429,17 @@ function renderTable(){
     const receiptBtn=imgUrls.length>0
       ?`<img src="${imgUrls[0]}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy">`
       :`<span style="color:var(--muted2);font-size:11px">—</span>`;
-    const actButtons=locked
+    const periodLocked=currentPeriod?.is_locked;
+    const editDelBtns=`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`;
+    const actButtons=periodLocked
       ?`<span style="font-size:11px;color:var(--muted2)">🔒</span>`
-      :isManager
-        ?`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`
-        :`<span style="font-size:11px;color:var(--muted2)">—</span>`;
+      :locked
+        ?(isManager
+            ?`<span title="รายการถูกล็อกจากการนับเงิน — ผู้จัดการแก้ไขได้ (ระบบจะบันทึก audit)" style="font-size:11px;color:var(--amber);margin-right:4px">🔓</span>`+editDelBtns
+            :`<span style="font-size:11px;color:var(--muted2)">🔒</span>`)
+        :isManager
+            ?editDelBtns
+            :`<span style="font-size:11px;color:var(--muted2)">—</span>`;
     h+=`<tr class="${locked?'locked-row':''}${tx.is_return?' return-row':''}">
       <td class="mono" style="font-size:11px">${fmtDate(tx.tx_date)}</td>
       <td><span class="badge ${tx.is_return?'badge-ret':tx.tx_type==='expense'?'badge-exp':'badge-inc'}">${tx.is_return?'คืน':tx.tx_type==='expense'?'จ่าย':'รับ'}</span>${locked?`<span class="badge-lock">🔒</span>`:''}</td>
@@ -1977,7 +1984,7 @@ function renderDailyCount(){
 // ══════════════════════════════════════════════
 function openForm(){
   if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว ไม่สามารถเพิ่มรายการได้','error'); return; }
-  editTxId=null;
+  editTxId=null; editTxWasLocked=false;
   pendingFiles=[];
   pendingPreviews=[];
   existingImageUrls=[];
@@ -1998,7 +2005,12 @@ function openEditTx(id){
   if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว','error'); return; }
   const tx=transactions.find(t=>t.id===id);
   if(!tx) return;
-  if(isTxLocked(tx)){ alert('รายการนี้ถูกล็อกแล้ว ไม่สามารถแก้ไขได้'); return; }
+  editTxWasLocked=false;
+  if(isTxLocked(tx)){
+    if(currentRole!=='manager'){ alert('รายการนี้ถูกล็อกแล้ว ไม่สามารถแก้ไขได้'); return; }
+    if(!confirm('⚠️ รายการนี้ถูกล็อกจากการนับเงินไปแล้ว\nการแก้ไขจะกระทบยอดที่นับ/ปิดก้อนไปก่อนหน้านี้\nระบบจะบันทึกการแก้ไขนี้ไว้ใน Audit\n\nยืนยันแก้ไขในฐานะผู้จัดการ?')) return;
+    editTxWasLocked=true;
+  }
   editTxId=id;
   pendingFiles=[];
   pendingPreviews=[];
@@ -2320,7 +2332,8 @@ async function saveEntry(){
       `ประเภท: ${formType==='income'?'รับเงิน':'รายจ่าย'} | `+
       `จำนวน: ${fmt2(amount)} บาท | บัญชี: ${acct} | `+
       `ผู้ทำรายการ: ${currentUser?.name||currentRole} (${currentRole}) | `+
-      `รูปภาพ: ${allImageUrls.length} ไฟล์`;
+      `รูปภาพ: ${allImageUrls.length} ไฟล์`+
+      (editTxId&&editTxWasLocked?` | ⚠️ แก้รายการที่ถูกล็อก (ผู้จัดการ override)`:'');
 
     if(editTxId){
       const {error}=await sb.from('petty_cash_transactions').update(payload).eq('id',editTxId);
@@ -2347,8 +2360,14 @@ async function deleteTx(id){
   if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
   const tx=transactions.find(t=>t.id===id);
   if(!tx) return;
-  if(isTxLocked(tx)){ alert('รายการนี้ถูกล็อกแล้ว'); return; }
-  if(!confirm(`ลบรายการวันที่ ${fmtDate(tx.tx_date)} จำนวน ${fmt2(tx.amount)} บาท?\n(รูปภาพใบเสร็จจะถูกลบออกจาก Storage ด้วย)`)) return;
+  if(currentPeriod?.is_locked){ alert('งวดนี้ปิดยอดแล้ว ไม่สามารถลบได้'); return; }
+  let delWasLocked=false;
+  if(isTxLocked(tx)){
+    delWasLocked=true;
+    if(!confirm(`⚠️ รายการนี้ถูกล็อกจากการนับเงินไปแล้ว\nการลบจะกระทบยอดที่นับ/ปิดก้อนไปก่อนหน้านี้\nระบบจะบันทึกการลบนี้ไว้ใน Audit\n\nลบรายการวันที่ ${fmtDate(tx.tx_date)} จำนวน ${fmt2(tx.amount)} บาท ในฐานะผู้จัดการ?`)) return;
+  } else {
+    if(!confirm(`ลบรายการวันที่ ${fmtDate(tx.tx_date)} จำนวน ${fmt2(tx.amount)} บาท?\n(รูปภาพใบเสร็จจะถูกลบออกจาก Storage ด้วย)`)) return;
+  }
   showLoading(true,'กำลังลบรายการ...');
   try{
     // ลบรูปภาพออกจาก Supabase Storage ก่อน
@@ -2367,7 +2386,8 @@ async function deleteTx(id){
     await addAudit('del',
       `ลบรายการ | วันที่: ${fmtDate(tx.tx_date)} | ประเภท: ${tx.tx_type==='income'?'รับเงิน':'รายจ่าย'} | `+
       `จำนวน: ${fmt2(tx.amount)} บาท | บัญชี: ${tx.acc_code||''} | `+
-      `ผู้ลบ: ${currentUser?.name||currentRole} (${currentRole})`
+      `ผู้ลบ: ${currentUser?.name||currentRole} (${currentRole})`+
+      (delWasLocked?` | ⚠️ ลบรายการที่ถูกล็อก (ผู้จัดการ override)`:'')
     );
     await loadTransactions();
     render();
