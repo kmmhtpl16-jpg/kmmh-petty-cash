@@ -4006,5 +4006,34 @@ function scheduleDailyTelegram(){
 
 scheduleDailyTelegram();
 </script>
+<script>
+/* ── เฟส 2 ความปลอดภัย: ล็อกอินผ่าน Edge Function pc-login (ตรวจ PIN ฝั่งเซิร์ฟเวอร์ ไม่อ่าน pin_value จากตารางด้วย anon อีกต่อไป + ออก session จริง) ── */
+(function(){
+  const PC_LOGIN_URL = SUPABASE_URL + '/functions/v1/pc-login';
+  window.submitPin = async function(){
+    if(Date.now() < _loginLockedUntil){
+      const remain = Math.ceil((_loginLockedUntil - Date.now())/1000);
+      showLoginError('🔒 ลองใหม่ใน ' + remain + ' วินาที');
+      return;
+    }
+    const pin = pinBuffer; pinBuffer = ''; updatePinDots();
+    setLoginLoading('⏳ กำลังตรวจสอบ...');
+    try{
+      const resp = await fetch(PC_LOGIN_URL, { method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Content-Type':'application/json' }, body: JSON.stringify({ pin: pin }) });
+      const j = await resp.json().catch(()=>({}));
+      const data = (resp.ok && j.user) ? j.user : null;
+      if(!data){
+        _loginAttempts++;
+        if(_loginAttempts >= 5){ _loginLockedUntil = Date.now() + 30000; _loginAttempts = 0; showLoginError('🔒 ป้อน PIN ผิดหลายครั้ง — รอ 30 วินาที'); }
+        else { showLoginError('❌ PIN ไม่ถูกต้อง (' + _loginAttempts + '/5)'); }
+        setLoginLoading(''); return;
+      }
+      if(j.access_token){ await sb.auth.setSession({ access_token:j.access_token, refresh_token:j.refresh_token }); }
+      _loginAttempts = 0; currentUser = data; currentRole = data.role;
+      setLoginLoading(''); await enterApp();
+    }catch(e){ showLoginError('❌ เชื่อมต่อ Supabase ล้มเหลว: ' + e.message); setLoginLoading(''); }
+  };
+})();
+</script>
 </body>
 </html>
