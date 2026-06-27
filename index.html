@@ -1427,7 +1427,7 @@ function renderTable(){
     let imgUrls=[];
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
     const receiptBtn=imgUrls.length>0
-      ?`<img src="${imgUrls[0]}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy">`
+      ?`<img src="${imgUrls[0].replace('/object/public/','/render/image/public/')}?width=72&height=72&resize=cover&quality=60" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy">`
       :`<span style="color:var(--muted2);font-size:11px">—</span>`;
     const periodLocked=currentPeriod?.is_locked;
     const editDelBtns=`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`;
