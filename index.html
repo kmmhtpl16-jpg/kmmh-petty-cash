@@ -883,6 +883,23 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 </div>
 
+<!-- ─── DAILY COUNT PIN MODAL (นับรายวัน ต้องมีผู้ตรวจสอบยืนยัน) ─── -->
+<div class="modal-bg" id="dailyPinModal">
+<div class="modal">
+<h2>🔢 ผู้ตรวจสอบยืนยันการนับรายวัน</h2>
+<div id="dcInfo" style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.9"></div>
+<div class="mgr-pin-wrap">
+<label>🔑 PIN ผู้ตรวจสอบ หรือ ผู้จัดการ — จำเป็น</label>
+<input type="password" id="dcPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkDailyPin()" autocomplete="off">
+<div class="mgr-pin-status" id="dcPinStatus"></div>
+</div>
+<div class="modal-btns">
+<button class="btn-cancel-sm" onclick="closeModal('dailyPinModal')">ยกเลิก</button>
+<button class="btn btn-dark btn-save" id="btnConfirmDailyPin" onclick="confirmDailyCountSave()" disabled style="opacity:.4;cursor:not-allowed">✅ ยืนยันและบันทึก</button>
+</div>
+</div>
+</div>
+
 <!-- ─── LIGHTBOX ─── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightboxImg" src="" alt="receipt">
@@ -1929,6 +1946,7 @@ function previewDailyCount(){
   if(badge){ badge.textContent=(diff>=0?'+':'')+fmt2(diff);
     badge.className='diff-badge '+(Math.abs(diff)<0.005?'diff-ok':Math.abs(diff)<200?'diff-warn':'diff-bad'); }
 }
+let _pendingDaily=null;
 async function dailyCountSave(){
   if(!currentPeriod){ showToast('ยังไม่ได้เปิดงวดเงินสดย่อย','error'); return; }
   const inp=document.getElementById('dailyCountInput');
@@ -1938,8 +1956,44 @@ async function dailyCountSave(){
   const book=closing();
   const diff=real-book;
   const today=todayStr();
-  const diffTxt=Math.abs(diff)<0.005?'ยอดตรงพอดี':(diff>0?('เกิน '+fmt2(diff)+' บาท'):('ขาด '+fmt2(Math.abs(diff))+' บาท'));
-  if(!confirm('ยืนยันบันทึกการนับวันนี้?\n\nยอดตามบัญชี: '+fmt2(book)+' บาท\nนับจริงได้: '+fmt2(real)+' บาท\nผลต่าง: '+diffTxt+'\nวันที่: '+today)) return;
+  _pendingDaily={book,real,diff,today};
+  const diffTxt=Math.abs(diff)<0.005?'<span style="color:var(--green)">✅ ยอดตรง</span>':`<span style="color:var(--red)">⚠️ ต่างกัน ${fmt2(Math.abs(diff))} บาท (${diff>0?'เกิน':'ขาด'})</span>`;
+  document.getElementById('dcInfo').innerHTML=`<b>วันที่:</b> ${today}<br><b>ยอดตามบัญชี:</b> ${fmt2(book)} บาท<br><b>นับจริงได้:</b> ${fmt2(real)} บาท<br><b>ผลต่าง:</b> ${diffTxt}`;
+  document.getElementById('dcPin').value='';
+  document.getElementById('dcPinStatus').textContent='';
+  const btn=document.getElementById('btnConfirmDailyPin');
+  btn.disabled=true; btn.style.opacity='.4'; btn.style.cursor='not-allowed'; btn._auditorName=''; btn._auditorRole='';
+  openModal('dailyPinModal');
+  setTimeout(()=>document.getElementById('dcPin').focus(),200);
+}
+
+async function checkDailyPin(){
+  const val=document.getElementById('dcPin').value;
+  const status=document.getElementById('dcPinStatus');
+  const btn=document.getElementById('btnConfirmDailyPin');
+  btn.disabled=true; btn.style.opacity='.4'; btn.style.cursor='not-allowed'; btn._auditorName=''; btn._auditorRole='';
+  if(val.length<4){ status.textContent=''; return; }
+  try{
+    const {data}=await sb.from('petty_cash_users').select('id,name,role').eq('pin_value',val).in('role',['manager','auditor']).eq('is_active',true).maybeSingle();
+    if(data){
+      status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
+      status.style.color='var(--green)';
+      btn._auditorName=data.name; btn._auditorRole=data.role;
+      btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+    } else {
+      status.textContent='❌ PIN ไม่ถูกต้อง (ต้องเป็นผู้ตรวจสอบหรือผู้จัดการ)';
+      status.style.color='var(--red)';
+    }
+  }catch(e){ status.textContent='❌ '+e.message; status.style.color='var(--red)'; }
+}
+
+async function confirmDailyCountSave(){
+  if(!_pendingDaily) return;
+  const btn=document.getElementById('btnConfirmDailyPin');
+  const auditorName=btn._auditorName;
+  if(!auditorName){ showToast('กรุณายืนยัน PIN ผู้ตรวจสอบก่อน','error'); return; }
+  const {book,real,diff,today}=_pendingDaily;
+  closeModal('dailyPinModal');
   showLoading(true,'บันทึกการนับวันนี้...');
   try{
     const {error}=await sb.from('petty_cash_counts').insert({
@@ -1947,17 +2001,18 @@ async function dailyCountSave(){
       bal_book:book,
       bal_real:real,
       diff,
-      note:'นับประจำวัน',
+      note:'นับประจำวัน (ตรวจโดย: '+auditorName+')',
       by_role:currentRole,
       by_name:currentUser?.name||currentRole,
       count_date:today
     });
     if(error) throw new Error(error.message);
-    await addAudit('add','นับเงินประจำวัน ('+today+'): บัญชี '+fmt2(book)+' บาท | จริง '+fmt2(real)+' บาท | ต่าง '+fmt2(diff)+' บาท | โดย '+(currentUser?.name||currentRole));
-    inp.value='';
+    await addAudit('add','นับเงินประจำวัน ('+today+'): บัญชี '+fmt2(book)+' บาท | จริง '+fmt2(real)+' บาท | ต่าง '+fmt2(diff)+' บาท | โดย '+(currentUser?.name||currentRole)+' | ตรวจโดย '+auditorName);
+    document.getElementById('dailyCountInput').value='';
+    _pendingDaily=null;
     await loadCounts();
     renderDailyCount(); renderCountHistory(); renderReconcile();
-    showToast('บันทึกการนับวันนี้แล้ว ✅ ยอดจะขึ้นในรายงานประจำวัน','success');
+    showToast('บันทึกการนับวันนี้แล้ว ✅ (ตรวจโดย '+auditorName+')','success');
   }catch(e){ showToast('บันทึกล้มเหลว: '+e.message,'error'); }
   showLoading(false);
 }
