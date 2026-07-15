@@ -2404,7 +2404,10 @@ async function saveEntry(){
       image_urls: allImageUrls.length ? JSON.stringify(allImageUrls) : null,
       by_role   : currentRole,
       by_name   : currentUser?.name || currentRole,
-      kon_number: transactions.filter(t => t.acc_code === '1111-30' && t.tx_type === 'income').length
+      // ⚠️ เดิมนับจากจำนวน income 1111-30 (รวมรายการ 'สำรอง' ด้วย) → พอมีเงินสำรอง เลขก้อนจะกระโดด
+      // ไปเป็นก้อนที่ไม่มีจริง ทำให้ยอดก้อน/ช่องเงินสำรองเพี้ยน — ใช้เลขก้อนที่เปิดอยู่จริงแทน
+      kon_number: currentOpenKon?.kon_number
+                  || (transactions.filter(t => t.acc_code === '1111-30' && t.tx_type === 'income' && !(t.description||'').includes('สำรอง')).length || 1)
     };
 
     // ── Step 3: Audit log พร้อม ชื่อ + สิทธิ์ ──
@@ -2532,14 +2535,25 @@ function renderCloseKonArea(){
 async function openCloseMonthModal(){
   if(!currentPeriod){ showToast('ไม่พบงวดเดือนนี้','error'); return; }
   if(!currentOpenKon||currentOpenKon.status!=='open'){ showToast('ไม่พบก้อนที่เปิดอยู่','error'); return; }
-  const cl=closing();
+  const cl=konClosing(currentOpenKon.kon_number,currentOpenKon.open_bal);
   const lcd=lastTxDate();
   const closeDateEl=document.getElementById('closeDateDisplay');
   if(closeDateEl) closeDateEl.textContent='วันที่ปิดวงเงินที่ระบบจะบันทึก: '+lcd;
   document.getElementById('cmBook').value=cl;
   document.getElementById('cmActual').value=actualCash||'';
   document.getElementById('cmNote').value='';
-  document.getElementById('reserveRow').style.display='none';
+  // ก้อนติดลบ = ต้องยืมเงินสำรอง → โชว์ช่องให้กรอกตั้งแต่เปิดหน้า (ไม่ต้องกดปุ่มก่อน)
+  const reserveRow=document.getElementById('reserveRow');
+  const reserveInput=document.getElementById('reserveInput');
+  const reserveMin=document.getElementById('reserveMin');
+  if(cl<-0.005){
+    if(reserveMin) reserveMin.textContent=fmt2(Math.abs(cl));
+    if(reserveRow) reserveRow.style.display='block';
+    if(reserveInput) reserveInput.value='';
+  } else {
+    if(reserveRow) reserveRow.style.display='none';
+    if(reserveInput) reserveInput.value='';
+  }
   previewCloseMonth();
   openModal('closeMonthModal');
   setTimeout(()=>document.getElementById('cmActual').focus(),200);
@@ -2547,7 +2561,7 @@ async function openCloseMonthModal(){
 
 function previewCloseMonth(){
   const actual=parseFloat(document.getElementById('cmActual').value);
-  const book=closing();
+  const book=currentOpenKon?konClosing(currentOpenKon.kon_number,currentOpenKon.open_bal):closing();
   if(isNaN(actual)){ document.getElementById('cmDiffPreview').innerHTML=''; return; }
   const diff=actual-book;
   const cls=Math.abs(diff)<0.005?'ok':'bad';
@@ -2577,13 +2591,10 @@ async function submitKonForReview(){
     const reserveRow=document.getElementById('reserveRow');
     const reserveInput=document.getElementById('reserveInput');
     const reserveMin=document.getElementById('reserveMin');
-    if(!reserveRow||reserveRow.style.display==='none'){
-      if(reserveMin) reserveMin.textContent=fmt2(Math.abs(bookClosing));
-      if(reserveRow) reserveRow.style.display='block';
-      if(reserveInput){reserveInput.value='';reserveInput.focus();}
-      return;
-    }
+    if(reserveMin) reserveMin.textContent=fmt2(Math.abs(bookClosing));
+    if(reserveRow&&reserveRow.style.display==='none'){ reserveRow.style.display='block'; }
     reserve=parseFloat(reserveInput?.value);
+    if(isNaN(reserve)){ showToast(`ก้อนนี้ติดลบ — กรอกยอดเบิกสำรอง (ยืม) ≥ ${fmt2(Math.abs(bookClosing))} บาท`,'error'); reserveInput?.focus(); return; }
     if(isNaN(reserve)||reserve<Math.abs(bookClosing)-0.005){
       showToast(`reserve ต้องไม่น้อยกว่า ${fmt2(Math.abs(bookClosing))} บาท`,'error'); return;
     }
@@ -2965,7 +2976,11 @@ function konClosing(konNumber, openBal){
     !(t.description||'').includes('สำรอง')
   ).reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const exp = txs.filter(t =>
-    t.tx_type==='expense' && t.acc_code!=='1111-10'
+    t.tx_type==='expense' && (
+      t.acc_code!=='1111-10' ||
+      // ส่งคืนหนี้ก้อนก่อน = เงินออกจากลิ้นชักจริง ต้องหักด้วย (เดิมไม่หัก → ยอดก้อนสูงเกินจริงเท่ายอดหนี้)
+      !(t.description||'').includes('คืนเงินสดย่อย')
+    )
   ).reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const ret = txs.filter(t =>
     t.tx_type==='expense' && t.acc_code==='1111-10' &&
