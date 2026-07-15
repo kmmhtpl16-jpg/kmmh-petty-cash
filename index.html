@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- กันมือถือ/แท็บเล็ตแคชไฟล์เก่าไว้ (เคยทำให้เห็นสูตรคำนวณเวอร์ชันเก่าทั้งที่ deploy ใหม่แล้ว) -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://hfystbdqjhftrlelmkjm.supabase.co" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -327,7 +331,7 @@ tbody tr:hover td{background:#fafaf7}
       <button class="pin-key del" onclick="pinDel()">⌫ ลบ</button>
       <button class="pin-key zero" onclick="pinKey('0')">0</button>
     </div>
-    <div style="font-size:10px;color:var(--muted2);margin-top:.25rem">v4 · Cloud · Supabase</div>
+    <div style="font-size:10px;color:var(--muted2);margin-top:.25rem">v4 · Cloud · Supabase · <span id="buildStamp"></span></div>
   </div>
 </div>
 
@@ -975,6 +979,7 @@ const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
+const APP_BUILD='2026-07-15c';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
 let currentRole = null;      // null | 'cashier' | 'manager'
 let currentUser = null;      // row from petty_cash_users
 let pinBuffer = '';
@@ -4091,6 +4096,7 @@ function showLoading(show,msg='กำลังบันทึก...'){
 
 // Drag-drop on image upload zone
 document.addEventListener('DOMContentLoaded',()=>{
+  const bs=document.getElementById('buildStamp'); if(bs) bs.textContent='build '+APP_BUILD;
   const dz=document.getElementById('dropZone');
   if(dz){
     dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--blue)';});
