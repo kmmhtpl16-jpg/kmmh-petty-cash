@@ -943,6 +943,32 @@ tbody tr:hover td{background:#fafaf7}
 const SUPABASE_URL = 'https://hfystbdqjhftrlelmkjm.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmeXN0YmRxamhmdHJsZWxta2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTc3MDUsImV4cCI6MjA5NDczMzcwNX0.cyRCwh0G6ArSevhsKa6kmPnYhLRRJYrxhlH0ED_JJaE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ── รูปใบเสร็จผ่าน signed URL (bucket receipts = private) ──
+function receiptStoragePath(u){
+  if(!u) return null; u=String(u);
+  const m=u.match(/\/receipts\/([^?]+)/);
+  if(m) return decodeURIComponent(m[1]);
+  return u.includes('://')?null:u;
+}
+async function receiptSignedUrl(u, transform){
+  const path=receiptStoragePath(u);
+  if(!path) return null;
+  try{
+    const opts=transform?{transform}:undefined;
+    const {data,error}=await sb.storage.from('receipts').createSignedUrl(path, 3600, opts);
+    if(error){ console.warn('signedUrl', error.message); return null; }
+    return data?.signedUrl||null;
+  }catch(e){ console.warn('signedUrl', e.message); return null; }
+}
+async function hydrateReceiptThumbs(){
+  const imgs=document.querySelectorAll('img.receipt-thumb[data-rthumb]');
+  for(const el of imgs){
+    const raw=decodeURIComponent(el.getAttribute('data-rthumb'));
+    el.removeAttribute('data-rthumb');
+    const url=await receiptSignedUrl(raw, {width:72,height:72,resize:'cover',quality:60});
+    if(url) el.src=url;
+  }
+}
 
 // ══════════════════════════════════════════════
 // ACCOUNTS (รหัสบัญชี KMMH จริง)
@@ -1474,7 +1500,7 @@ function renderTable(){
     let imgUrls=[];
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
     const receiptBtn=imgUrls.length>0
-      ?`<img src="${imgUrls[0].replace('/object/public/','/render/image/public/')}?width=72&height=72&resize=cover&quality=60" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="eager">`
+      ?`<img data-rthumb="${encodeURIComponent(imgUrls[0])}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy" style="min-width:36px;min-height:36px;background:#f1f5f9">`
       :`<span style="color:var(--muted2);font-size:11px">—</span>`;
     const periodLocked=currentPeriod?.is_locked;
     const editDelBtns=`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`;
@@ -1498,6 +1524,7 @@ function renderTable(){
     </tr>`;
   });
   document.getElementById('entryTbody').innerHTML=h;
+  hydrateReceiptThumbs();
   const exp=transactions.filter(t=>t.tx_type==='expense'&&!isKonDebt(t));
   document.getElementById('tblFooter').innerHTML=exp.length
     ?`<div class="tbl-footer"><span>รวมรายจ่าย ${exp.length} รายการ</span><span style="color:#f9a8a8;font-family:'IBM Plex Mono',monospace">${fmt2(totalExp())} บาท</span></div>`:'';
@@ -2485,13 +2512,14 @@ async function deleteTx(id){
 }
 
 // Receipt lightbox — แสดงรูปจาก Supabase Storage URL
-function showLightboxTx(id){
+async function showLightboxTx(id){
   const tx=transactions.find(t=>t.id===id);
   if(!tx||!tx.image_urls) return;
   try{
     const imgs=JSON.parse(tx.image_urls);
     if(imgs.length){
-      document.getElementById('lightboxImg').src=imgs[0];
+      const url=await receiptSignedUrl(imgs[0]);
+      document.getElementById('lightboxImg').src=url||imgs[0];
       document.getElementById('lightbox').classList.add('open');
     }
   }catch{}
