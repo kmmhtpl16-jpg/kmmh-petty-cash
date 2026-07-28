@@ -1253,6 +1253,26 @@ async function loadCurrentKon(){
     currentOpenKon=(data&&data.length>0)?data[0]:null;
   }catch(e){ currentOpenKon=null; }
 }
+// ── กันแท็กเลขก้อนผิดจากหน้าเว็บค้าง: ดึง "ก้อนที่เปิดอยู่จริง" จาก DB สดทุกครั้งก่อนบันทึกรายการ ──
+// เคส 28ก.ค.69: พนักงานเปิดแอปค้างไว้ตั้งแต่เช้า ผู้จัดการปิดก้อน 3 เปิดก้อน 4 ตอนสาย
+// พอพนักงานลงรายการตอนบ่ายโดยไม่รีเฟรช รายการไปเกาะก้อน 3 (ปิดไปแล้ว) 3,600 บาท
+// → ยอดก้อน 4 สูงเกินจริง ช่องเบิกสำรองไม่ขึ้น ปิดก้อนไม่ได้
+async function resolveOpenKonForSave(){
+  if(!currentPeriod) return {ok:false,msg:'ไม่พบงวดปัจจุบัน'};
+  const {data,error}=await sb.from('petty_cash_kon')
+    .select('*')
+    .eq('period_id',currentPeriod.id)
+    .eq('status','open')
+    .order('kon_number',{ascending:false})
+    .limit(1)
+    .maybeSingle();
+  if(error) return {ok:false,msg:'ตรวจวงเงินก้อนที่เปิดอยู่ไม่ได้: '+error.message};
+  if(!data) return {ok:false,msg:'ตอนนี้ไม่มีวงเงินก้อนที่เปิดอยู่ (ก้อนล่าสุดปิดแล้ว/รอตรวจอยู่) — รอผู้จัดการเปิดก้อนใหม่ก่อน แล้วรีเฟรชหน้านี้'};
+  const stale = (currentOpenKon?.kon_number !== data.kon_number) || (currentOpenKon?.status !== 'open');
+  currentOpenKon = data;
+  return {ok:true, kon:data, stale};
+}
+
 async function loadCounts(){
   if(!currentPeriod) return;
   const {data}=await sb.from('petty_cash_counts')
@@ -2403,6 +2423,20 @@ async function saveEntry(){
   }
   _incomeFormReady=false; // reset flag หลังผ่านแล้ว
 
+  // ── Step 0: ตัดสินเลขก้อนให้ถูกก่อนทำอย่างอื่น (กันหน้าเว็บค้าง) ──
+  let konForSave=null, konWasStale=false;
+  showLoading(true,'ตรวจสอบวงเงินก้อน...');
+  try{
+    if(editTxId){
+      // แก้ไขรายการเดิม = คงเลขก้อนเดิมไว้เสมอ ห้ามย้ายก้อนอัตโนมัติ
+      konForSave=transactions.find(t=>t.id===editTxId)?.kon_number ?? null;
+    } else {
+      const r=await resolveOpenKonForSave();
+      if(!r.ok){ showLoading(false); alert('⛔ บันทึกไม่ได้\n\n'+r.msg); return; }
+      konForSave=r.kon.kon_number; konWasStale=!!r.stale;
+    }
+  }catch(e){ showLoading(false); showToast('ตรวจวงเงินก้อนไม่สำเร็จ: '+e.message,'error'); return; }
+
   showLoading(true,'อัปโหลดรูปภาพ...');
   try{
     // ── Step 1: Upload รูปภาพใหม่ขึ้น Supabase Storage ──
@@ -2435,12 +2469,10 @@ async function saveEntry(){
       amount,
       image_urls: allImageUrls.length ? JSON.stringify(allImageUrls) : null,
       by_role   : currentRole,
-      by_name   : currentUser?.name || currentRole,
-      // ⚠️ เดิมนับจากจำนวน income 1111-30 (รวมรายการ 'สำรอง' ด้วย) → พอมีเงินสำรอง เลขก้อนจะกระโดด
-      // ไปเป็นก้อนที่ไม่มีจริง ทำให้ยอดก้อน/ช่องเงินสำรองเพี้ยน — ใช้เลขก้อนที่เปิดอยู่จริงแทน
-      kon_number: currentOpenKon?.kon_number
-                  || (transactions.filter(t => t.acc_code === '1111-30' && t.tx_type === 'income' && !(t.description||'').includes('สำรอง')).length || 1)
+      by_name   : currentUser?.name || currentRole
     };
+    // เลขก้อน: เพิ่มใหม่ = ก้อนที่เปิดอยู่จริงจาก DB (Step 0) / แก้ไข = คงเลขก้อนเดิม
+    if(konForSave!=null) payload.kon_number=konForSave;
 
     // ── Step 3: Audit log พร้อม ชื่อ + สิทธิ์ ──
     const auditDesc=`${editTxId?'แก้ไข':'เพิ่ม'}รายการ | วันที่: ${fmtDate(date)} | `+
@@ -2464,9 +2496,15 @@ async function saveEntry(){
     pendingFiles=[]; pendingPreviews=[]; existingImageUrls=[];
 
     await loadTransactions();
+    await loadCurrentKon();
     closeForm();
     render();
-    showToast('บันทึกแล้ว ☁️','success');
+    try{ renderCloseKonArea(); }catch(_){}
+    if(konWasStale){
+      showToast(`ℹ️ หน้านี้ค้างอยู่ก้อนเก่า — ระบบบันทึกเข้าวงเงินก้อน ${konForSave} (ก้อนที่เปิดอยู่จริง) ให้แล้ว`,'ok');
+    } else {
+      showToast('บันทึกแล้ว ☁️','success');
+    }
   }catch(e){ showToast('บันทึกล้มเหลว: '+e.message,'error'); }
   showLoading(false);
 }
