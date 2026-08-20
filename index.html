@@ -509,11 +509,9 @@ tbody tr:hover td{background:#fafaf7}
   <div id="labMsg"></div>
   <div class="cards" id="labCards"></div>
   <div class="tbl-wrap" style="margin-top:12px"><div id="labList"></div></div>
-  <div class="toolbar no-print" style="margin-top:12px">
-    <button class="btn btn-green" id="labPayBtn" onclick="openLabourPay()">💵 จ่ายบิลที่เลือก</button>
-    <button class="btn btn-outline" onclick="openLabourOther()">➕ จ่ายค่าแรงงานอื่น (ไม่ใช่วงกบ)</button>
-    <button class="btn btn-outline" onclick="loadLabour(true)">↻ รีเฟรช</button>
-  </div>
+  <div id="labBasketWrap" style="margin-top:18px"></div>
+  <div id="labSummary" style="margin-top:14px"></div>
+  <div id="labHistWrap" style="margin-top:22px"></div>
 </div>
 
 <div id="view-audit" style="display:none">
@@ -646,15 +644,17 @@ tbody tr:hover td{background:#fafaf7}
 
 <div class="modal-bg" id="labourOtherModal">
 <div class="modal">
-  <h2>➕ ค่าแรงช่าง — งานที่ไม่ใช่วงกบ</h2>
-  <div class="audit-time" style="margin-bottom:10px">ลงรหัสเดิม <b>5211-20</b> เหมือนกัน แค่ติดป้ายว่าเป็นงานประเภทไหน</div>
+  <h2>➕ เพิ่มงานอื่น (ไม่ใช่วงกบ)</h2>
+  <div class="audit-time" style="margin-bottom:10px">ยังไม่บันทึกลงระบบ — แค่ใส่ลงรายการรอจ่ายรอบนี้</div>
   <div class="field"><label>ประเภทงาน (บังคับเลือก)</label>
     <div id="labKinds"></div></div>
+  <div class="field"><label>หมายเหตุ — ไปทำอะไรมา (ไม่บังคับ แต่ใส่ไว้จะดีมาก)</label>
+    <input type="text" id="labOtherNote" placeholder="เช่น แก้บานประตูบ้านคุณต้อย"></div>
   <div class="field"><label>จำนวนเงิน (บาท)</label>
     <input type="number" id="labOtherAmt" min="0" step="0.01" placeholder="0.00"></div>
   <div id="labOtherMsg"></div>
   <div class="modal-btns">
-    <button class="btn btn-green" onclick="doLabourOther()">✅ บันทึกรายการ</button>
+    <button class="btn btn-green" onclick="labBasketAdd()">➕ ใส่ในรายการ</button>
     <button class="btn btn-outline" onclick="closeModal('labourOtherModal')">ยกเลิก</button>
   </div>
 </div></div>
@@ -1044,7 +1044,7 @@ const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
-const APP_BUILD='2026-08-20-labour3';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
+const APP_BUILD='2026-08-20-labour4';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
 let currentRole = null;      // null | 'cashier' | 'manager'
 let currentUser = null;      // row from petty_cash_users
 let currentPin  = '';        // 🪚 เก็บไว้ส่งให้ RPC ค่าแรงช่าง (ไม่แสดงบนจอ ไม่เก็บลง storage)
@@ -4182,8 +4182,14 @@ function fmtDatetime(ts){
 // ══════════════════════════════════════════════
 let LAB = {rows:[], other:{}, loaded:false, loading:false};
 let LAB_SEL = {};          // bill_id -> true
+let LAB_BASKET = [];       // งานอื่นที่รอจ่ายรอบนี้ — อยู่ในเครื่องเท่านั้น ยังไม่เข้าระบบ
 let LAB_KIND = '';
 const LAB_KINDS = ['ไสไม้','ตัดไม้','ซ่อม/แก้งาน','ประกอบ/ติดตั้ง','อื่น ๆ'];
+
+/* กันอักขระพิเศษในข้อความที่ผู้ใช้พิมพ์เอง (หมายเหตุงานอื่น) ไม่ให้พังหน้าจอ
+   หมายเหตุ: esc() อีกตัวในไฟล์นี้ซ่อนอยู่ในฟังก์ชันอื่น เรียกจากตรงนี้ไม่ได้ */
+function esc(s){ return String(s==null?'':s)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function labSay(el,txt,cls){ const e=document.getElementById(el); if(e) e.innerHTML = txt?`<div class="alert alert-${cls||'danger'}"><span>${txt}</span></div>`:''; }
 
@@ -4195,6 +4201,7 @@ async function loadLabour(showUi){
     if(error) throw new Error(error.message);
     if(!data || !data.ok) throw new Error((data&&data.error)||'อ่านข้อมูลบิลไม่ได้');
     LAB.rows = data.rows||[]; LAB.other = data.other_month||{}; LAB.today = data.today;
+    LAB.hist = data.other_rows||[];   // รายการ 5211-20 เดือนนี้ ทีละแถว
     LAB.loaded = true;
     // ล้างการเลือกของบิลที่หายไปแล้ว
     Object.keys(LAB_SEL).forEach(k=>{ if(!LAB.rows.some(b=>String(b.bill_id)===k)) delete LAB_SEL[k]; });
@@ -4214,11 +4221,13 @@ function renderLabour(){
   const sets = rows.reduce((s,b)=>s+labLeftSets(b),0);
   const o    = LAB.other||{};
   const paid = Number(o.paid_total||0), linked = Number(o.linked||0);
+  const tagged = Number(o.tagged||0);
+  const untag  = (o.untagged!=null) ? Number(o.untagged) : (paid-linked-tagged);
   document.getElementById('labCards').innerHTML=`
     <div class="card"><div class="card-lbl">บิลค้างจ่าย</div><div class="card-val ${owe>0?'red':''} mono">${fmt(owe)}</div><div class="card-sub">${rows.length} ใบ · ${fmt(sets)} วง</div></div>
-    <div class="card"><div class="card-lbl">จ่ายแล้ว (ผูกบิล)</div><div class="card-val green mono">${fmt(linked)}</div><div class="card-sub">เดือนนี้</div></div>
-    <div class="card"><div class="card-lbl">จ่าย 5211-20 ทั้งเดือน</div><div class="card-val mono">${fmt(paid)}</div><div class="card-sub">${o.n||0} รายการ</div></div>
-    <div class="card"><div class="card-lbl">ยังไม่ผูกบิล</div><div class="card-val amber mono">${fmt(paid-linked)}</div><div class="card-sub">งานอื่น / ยังไม่ระบุ</div></div>`;
+    <div class="card"><div class="card-lbl">จ่ายผ่านบิลแล้ว</div><div class="card-val green mono">${fmt(linked)}</div><div class="card-sub">เดือนนี้</div></div>
+    <div class="card"><div class="card-lbl">งานอื่น — ระบุแล้ว</div><div class="card-val green mono">${fmt(tagged)}</div><div class="card-sub">รู้แล้วว่าไปทำอะไร</div></div>
+    <div class="card"><div class="card-lbl">ยังไม่ระบุ</div><div class="card-val amber mono">${fmt(untag)}</div><div class="card-sub">จาก 5211-20 ทั้งเดือน ${fmt(paid)} · ${o.n||0} รายการ</div></div>`;
 
   /* ตารางมีหัวคอลัมน์ — ตรงตามหน้าตัวอย่างที่เคาะไว้ (วงที่สั่ง / ค่าแรงตามใบ / จ่ายแล้ว / คงเหลือ / สถานะ) */
   document.getElementById('labList').innerHTML = !rows.length
@@ -4253,22 +4262,127 @@ function renderLabour(){
               : '<span class="badge badge-exp">ยังไม่จ่าย</span>'}</td>
         </tr>`;
       }).join('') + '</tbody></table>';
-  labUpdatePayBtn();
+  renderLabBasket();
+  renderLabSummary();
+  renderLabHist();
 }
 
-function labToggle(id, on){ if(on) LAB_SEL[id]=true; else delete LAB_SEL[id]; labUpdatePayBtn(); }
-function labSelected(){ return (LAB.rows||[]).filter(b=>LAB_SEL[b.bill_id]); }
-function labUpdatePayBtn(){
-  const s = labSelected();
-  const sum = s.reduce((a,b)=>a+Number(b.left_amount||0),0);
-  const btn = document.getElementById('labPayBtn');
-  if(btn) btn.textContent = s.length ? `💵 จ่ายบิลที่เลือก (${s.length} ใบ · ${fmt(sum)} บาท)` : '💵 จ่ายบิลที่เลือก';
+/* ── ตะกร้างานอื่น (ยังไม่บันทึก) ─────────────────────── */
+function labBasketSum(){ return LAB_BASKET.reduce((s,x)=>s+Number(x.amount||0),0); }
+
+function renderLabBasket(){
+  const el = document.getElementById('labBasketWrap');
+  if(!el) return;
+  const head = `<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div><b>➕ งานอื่น (ไม่ใช่วงกบ) — ที่จะจ่ายรอบนี้</b>
+        <div class="audit-time">ยังไม่บันทึก จนกว่าจะกดยืนยันด้านล่าง</div></div>
+      <button class="btn btn-outline btn-sm" onclick="openLabourOther()">➕ เพิ่มงานอื่น</button>
+    </div>`;
+  if(!LAB_BASKET.length){
+    el.innerHTML = head + `<div class="tbl-wrap"><div class="empty" style="padding:20px">
+      ยังไม่มีรายการงานอื่นในรอบนี้</div></div>`;
+    return;
+  }
+  el.innerHTML = head + `<div class="tbl-wrap"><table><thead><tr>
+      <th>ประเภทงาน</th><th>หมายเหตุ</th>
+      <th style="text-align:right">ยอด</th><th style="width:70px"></th></tr></thead><tbody>` +
+    LAB_BASKET.map((x,i)=>`<tr>
+      <td><span class="badge badge-ret">${esc(x.kind)}</span></td>
+      <td class="desc">${x.note?esc(x.note):'<span class="audit-time">— ไม่ได้ใส่หมายเหตุ —</span>'}</td>
+      <td class="mono" style="text-align:right">${fmt2(x.amount)}</td>
+      <td style="text-align:center">
+        <button class="btn btn-outline btn-sm" onclick="labBasketDel(${i})">ลบ</button></td>
+    </tr>`).join('') + '</tbody></table></div>';
 }
+
+function labBasketDel(i){
+  LAB_BASKET.splice(i,1);
+  renderLabBasket(); renderLabSummary();
+}
+
+function labBasketAdd(){
+  const amt  = Number(document.getElementById('labOtherAmt').value);
+  const note = (document.getElementById('labOtherNote').value||'').trim();
+  if(!LAB_KIND){ labSay('labOtherMsg','ต้องแตะเลือกประเภทงานก่อน'); return; }
+  if(!(amt>0)){ labSay('labOtherMsg','ใส่จำนวนเงินให้มากกว่า 0'); return; }
+  LAB_BASKET.push({kind:LAB_KIND, note:note||null, amount:Math.round(amt*100)/100});
+  closeModal('labourOtherModal');
+  renderLabBasket(); renderLabSummary();
+  showToast(`ใส่ ${LAB_KIND} ${fmt2(amt)} บาท ในรายการแล้ว — ยังไม่บันทึก`,'success');
+}
+
+/* ── แถบสรุปยอดรวม ────────────────────────────────────── */
+function renderLabSummary(){
+  const el = document.getElementById('labSummary');
+  if(!el) return;
+  const sel = labSelected();
+  const billSum = sel.reduce((a,b)=>a+Number(b.left_amount||0),0);
+  const othSum  = labBasketSum();
+  const total   = billSum + othSum;
+  const can     = total > 0;
+  el.innerHTML = `<div class="wr-card" style="border:2px solid var(--green)">
+    <div class="sum-row"><span>บิลวงกบที่เลือก</span><span class="mono">${
+      sel.length ? sel.length+' ใบ · '+fmt2(billSum) : '— ยังไม่เลือก —'}</span></div>
+    <div class="sum-row"><span>งานอื่นในรอบนี้</span><span class="mono">${
+      LAB_BASKET.length ? LAB_BASKET.length+' รายการ · '+fmt2(othSum) : '— ไม่มี —'}</span></div>
+    <div class="sum-row sum-total"><span>รวมจ่ายรอบนี้</span>
+      <span class="mono">${fmt2(total)} บาท</span></div>
+    ${can?'':'<div class="sum-row" style="color:#8a5b00">⚠️ ยังไม่ได้เลือกบิล และยังไม่มีงานอื่น — ยังกดจ่ายไม่ได้</div>'}
+    <div class="toolbar no-print" style="margin-top:12px">
+      <button class="btn btn-green" id="labPayBtn" onclick="openLabourPay()"
+        ${can?'':'disabled style="opacity:.5;cursor:not-allowed"'}>💵 ยืนยันจ่าย ${fmt2(total)} บาท</button>
+      <button class="btn btn-outline" onclick="loadLabour(true)">↻ รีเฟรช</button>
+    </div>
+    <div class="audit-time" style="margin-top:8px">ลงเป็นรายจ่ายเงินสดย่อย <b>5211-20</b> · <b>1 แถวเดียว</b>${
+      currentOpenKon?' · ก้อนที่ '+currentOpenKon.kon_number:''} · ${fmtDate(todayStr())}</div>
+  </div>`;
+}
+
+/* ── รายการ 5211-20 เดือนนี้ (ของที่บันทึกไปแล้ว) ───────── */
+function renderLabHist(){
+  const el = document.getElementById('labHistWrap');
+  if(!el) return;
+  const hist = LAB.hist||[];
+  const head = `<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:8px"><div><b>📜 รายการค่าแรง 5211-20 เดือนนี้</b>
+      <div class="audit-time">ทุกแถวที่ลงรหัส 5211-20 ในเดือนนี้ — เห็นว่าอันไหนระบุแล้ว อันไหนยังไม่รู้ว่าไปทำอะไร</div></div></div>`;
+  if(!hist.length){
+    el.innerHTML = head + '<div class="tbl-wrap"><div class="empty">ยังไม่มีรายการเดือนนี้</div></div>';
+    return;
+  }
+  el.innerHTML = head + `<div class="tbl-wrap"><table><thead><tr>
+      <th style="width:110px">วันที่</th><th>รายการ</th>
+      <th style="text-align:right;width:110px">ยอด</th>
+      <th style="text-align:center;width:110px">สถานะ</th></tr></thead><tbody>` +
+    hist.map(r=>{
+      const oth = (r.others||[]).map(o=>esc(o.kind)+(o.note?' ('+esc(o.note)+')':'')+' '+fmt2(o.amount)).join(' · ');
+      let main, badge;
+      if(r.state==='bill'){
+        main  = '<b>ค่าแรงช่าง</b>' + (r.bill_nos?' — บิล '+esc(r.bill_nos):'');
+        badge = '<span class="badge badge-ret">ผูกบิลแล้ว</span>';
+      }else if(r.state==='other'){
+        main  = esc(r.description||'ค่าแรงงานอื่น');
+        badge = '<span class="badge badge-ret">ระบุแล้ว</span>';
+      }else{
+        main  = r.description ? esc(r.description)
+              : '<span style="color:#b26a00">— ไม่มีคำอธิบาย —</span>';
+        badge = '<span class="badge badge-exp">ยังไม่ระบุ</span>';
+      }
+      return `<tr>
+        <td class="mono">${fmtDate(r.tx_date)}</td>
+        <td class="desc">${main}${oth?'<div class="audit-time">'+oth+'</div>':''}</td>
+        <td class="mono ${r.state==='unknown'?'':'num-green'}" style="text-align:right">${fmt2(r.amount)}</td>
+        <td style="text-align:center">${badge}</td></tr>`;
+    }).join('') + '</tbody></table></div>';
+}
+
+function labToggle(id, on){ if(on) LAB_SEL[id]=true; else delete LAB_SEL[id]; renderLabSummary(); }
+function labSelected(){ return (LAB.rows||[]).filter(b=>LAB_SEL[b.bill_id]); }
+function labUpdatePayBtn(){ renderLabSummary(); }   /* ของเดิม — เก็บไว้กันโค้ดอื่นเรียกค้าง */
 
 // ── หน้าต่างจ่าย ──────────────────────────────────────────
 function openLabourPay(){
   const sel = labSelected();
-  if(!sel.length){ showToast('ยังไม่ได้เลือกบิล','error'); return; }
+  if(!sel.length && !LAB_BASKET.length){ showToast('ยังไม่ได้เลือกบิล และยังไม่มีงานอื่น','error'); return; }
   if(currentRole==='auditor'){ showToast('ผู้ตรวจสอบบันทึกรายการไม่ได้','error'); return; }
   if(!currentPeriod){ showToast('ยังไม่ได้เปิดงวดเงินสดย่อย','error'); return; }
   if(currentPeriod.is_locked){ showToast('งวดนี้ปิดยอดแล้ว','error'); return; }
@@ -4303,7 +4417,13 @@ function openLabourPay(){
       </div>
       <div class="labbillsum mono" data-bill="${b.bill_id}" style="text-align:right;margin-top:6px;font-weight:700"></div>
     </div>`;
-  }).join('');
+  }).join('') + (LAB_BASKET.length ? `<div class="wr-card" style="margin-top:10px;background:#f6fbf7">
+      <div><b>➕ งานอื่น ${LAB_BASKET.length} รายการ</b></div>
+      ${LAB_BASKET.map(x=>`<div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px">
+        <span>${esc(x.kind)}${x.note?' <span class="audit-time">'+esc(x.note)+'</span>':''}</span>
+        <span class="mono">${fmt2(x.amount)}</span></div>`).join('')}
+      <div class="mono" style="text-align:right;margin-top:6px;font-weight:700">${fmt2(labBasketSum())} บาท</div>
+    </div>` : '');
 
   labSay('labMsg','');
   labRecalc();
@@ -4311,7 +4431,7 @@ function openLabourPay(){
 }
 
 function labRecalc(){
-  let total = 0, bad = false, why = '';
+  let total = labBasketSum(), bad = false, why = '';   /* เริ่มจากยอดงานอื่นในตะกร้า */
   labSelected().forEach(b=>{
     let sets=0, amt=0;
     document.querySelectorAll(`.labsets[data-bill="${b.bill_id}"]`).forEach(i=>{
@@ -4337,6 +4457,7 @@ function labRecalc(){
     if(cell) cell.textContent = fmt2(amt)+' บาท';
   });
   document.getElementById('labPaySum').innerHTML =
+    (LAB_BASKET.length ? `<div class="sum-row"><span>งานอื่น ${LAB_BASKET.length} รายการ</span><span class="mono">${fmt2(labBasketSum())} บาท</span></div>` : '')+
     `<div class="sum-row sum-total"><span>รวมจ่ายครั้งนี้</span><span class="mono">${fmt2(total)} บาท</span></div>`+
     (why ? `<div class="sum-row" style="color:#8a5b00">⚠️ ${why} — ยังกดจ่ายไม่ได้</div>` : '');
   const go = document.getElementById('labPayGo');
@@ -4357,31 +4478,36 @@ async function doLabourPay(){
     const rs = document.querySelector(`.labreason[data-bill="${b.bill_id}"]`);
     return {bill_id:b.bill_id, lines, reason:(rs&&rs.value.trim())||null};
   }).filter(x=>x.lines.length);
-  if(!items.length){ showToast('ยังไม่ได้ใส่จำนวนวง','error'); return; }
+  if(!items.length && !LAB_BASKET.length){ showToast('ยังไม่ได้ใส่จำนวนวง','error'); return; }
 
   showLoading(true,'บันทึกการจ่าย...');
   try{
-    const {data,error} = await sb.rpc('fr_labour_pay',{
+    const {data,error} = await sb.rpc('fr_labour_pay_batch',{
       p_pin: currentPin,
       p_tx_date: todayStr(),
       p_period_id: currentPeriod.id,
       p_kon_number: currentOpenKon ? currentOpenKon.kon_number : null,
       p_by_name: (currentUser&&currentUser.name) || currentRole,
-      p_items: items
+      p_items: items,
+      p_others: LAB_BASKET
     });
     if(error) throw new Error(error.message);
     if(!data || !data.ok) throw new Error((data&&data.error)||'บันทึกไม่สำเร็จ');
     closeModal('labourPayModal');
-    LAB_SEL = {};
-    await addAudit('add', `จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท | บิล: ${data.bill_nos} | `+
+    const paidOthers = LAB_BASKET.slice();
+    LAB_SEL = {}; LAB_BASKET = [];
+    await addAudit('add', `จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท | บิล: ${data.bill_nos||'—'} | `+
+                          `งานอื่น: ${paidOthers.length?paidOthers.map(x=>x.kind+' '+fmt2(x.amount)).join(', '):'—'} | `+
                           `ผู้ทำรายการ: ${(currentUser&&currentUser.name)||currentRole} (${currentRole})`);
     await loadTransactions();
     await loadCurrentKon();
     await loadLabour(true);
     render();
     showToast(`จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท แล้ว`,'success');
-    labSay('labMsg', `✅ จ่ายค่าแรงช่างแล้ว <b>${fmt2(data.total)} บาท</b> · บิล ${data.bill_nos}`+
-                     ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 เรียบร้อย`, 'ok');
+    labSay('labMsg', `✅ จ่ายค่าแรงช่างแล้ว <b>${fmt2(data.total)} บาท</b>`+
+                     (data.bill_nos?` · บิล ${data.bill_nos}`:'')+
+                     (data.others?` · งานอื่น ${data.others} รายการ (${fmt2(data.others_total)} บาท)`:'')+
+                     ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 <b>แถวเดียว</b> เรียบร้อย`, 'ok');
     switchTab('labour'); window.scrollTo({top:0, behavior:'smooth'});
   }catch(e){
     showToast('จ่ายไม่สำเร็จ: '+e.message,'error');
@@ -4398,6 +4524,7 @@ function openLabourOther(){
   document.getElementById('labKinds').innerHTML = LAB_KINDS.map(k=>
     `<button type="button" class="type-btn labkind" data-k="${k}" onclick="labPickKind('${k}')">${k}</button>`).join(' ');
   document.getElementById('labOtherAmt').value='';
+  document.getElementById('labOtherNote').value='';
   labSay('labOtherMsg','');
   openModal('labourOtherModal');
 }
@@ -4413,36 +4540,7 @@ function labPickKind(k){
   });
   labSay('labOtherMsg','');
 }
-async function doLabourOther(){
-  const amt = Number(document.getElementById('labOtherAmt').value);
-  if(!LAB_KIND){ labSay('labOtherMsg','ต้องแตะเลือกประเภทงานก่อน'); return; }
-  if(!(amt>0)){ labSay('labOtherMsg','ใส่จำนวนเงินให้มากกว่า 0'); return; }
-  showLoading(true,'บันทึกรายการ...');
-  try{
-    const {data,error} = await sb.rpc('fr_labour_other_pay',{
-      p_pin: currentPin, p_tx_date: todayStr(), p_period_id: currentPeriod.id,
-      p_kon_number: currentOpenKon ? currentOpenKon.kon_number : null,
-      p_by_name: (currentUser&&currentUser.name) || currentRole,
-      p_kind: LAB_KIND, p_amount: amt
-    });
-    if(error) throw new Error(error.message);
-    if(!data || !data.ok) throw new Error((data&&data.error)||'บันทึกไม่สำเร็จ');
-    closeModal('labourOtherModal');
-    await addAudit('add', `ค่าแรงช่างงานอื่น (${LAB_KIND}) ${fmt2(amt)} บาท | `+
-                          `ผู้ทำรายการ: ${(currentUser&&currentUser.name)||currentRole} (${currentRole})`);
-    await loadTransactions();
-    await loadCurrentKon();
-    await loadLabour(true);
-    render();
-    showToast(`บันทึกค่าแรง ${LAB_KIND} ${fmt2(amt)} บาท แล้ว`,'success');
-    labSay('labMsg', `✅ บันทึกค่าแรงงานอื่น (<b>${LAB_KIND}</b>) <b>${fmt2(amt)} บาท</b>`+
-                     ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 เรียบร้อย`, 'ok');
-    switchTab('labour'); window.scrollTo({top:0, behavior:'smooth'});
-  }catch(e){
-    labSay('labOtherMsg','บันทึกไม่สำเร็จ: '+e.message);
-  }
-  showLoading(false);
-}
+/* doLabourOther() ของเดิมถูกแทนด้วย labBasketAdd() + doLabourPay() — บันทึกทีเดียวแถวเดียว */
 
 // ══════════════════════════════════════════════
 // MODAL / UTILITY HELPERS
