@@ -1044,7 +1044,7 @@ const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
-const APP_BUILD='2026-08-20-labour2';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
+const APP_BUILD='2026-08-20-labour3';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
 let currentRole = null;      // null | 'cashier' | 'manager'
 let currentUser = null;      // row from petty_cash_users
 let currentPin  = '';        // 🪚 เก็บไว้ส่งให้ RPC ค่าแรงช่าง (ไม่แสดงบนจอ ไม่เก็บลง storage)
@@ -4220,26 +4220,39 @@ function renderLabour(){
     <div class="card"><div class="card-lbl">จ่าย 5211-20 ทั้งเดือน</div><div class="card-val mono">${fmt(paid)}</div><div class="card-sub">${o.n||0} รายการ</div></div>
     <div class="card"><div class="card-lbl">ยังไม่ผูกบิล</div><div class="card-val amber mono">${fmt(paid-linked)}</div><div class="card-sub">งานอื่น / ยังไม่ระบุ</div></div>`;
 
+  /* ตารางมีหัวคอลัมน์ — ตรงตามหน้าตัวอย่างที่เคาะไว้ (วงที่สั่ง / ค่าแรงตามใบ / จ่ายแล้ว / คงเหลือ / สถานะ) */
   document.getElementById('labList').innerHTML = !rows.length
     ? '<div class="empty">ไม่มีบิลค่าแรงค้างจ่าย 🎉</div>'
-    : rows.map(b=>{
+    : `<table><thead><tr>
+         <th style="width:40px"></th>
+         <th>เลขที่ใบสั่งงาน</th>
+         <th>งาน / ปลายทาง</th>
+         <th style="text-align:center">วงที่สั่ง</th>
+         <th style="text-align:right">ค่าแรงตามใบ</th>
+         <th style="text-align:right">จ่ายแล้ว</th>
+         <th style="text-align:right">คงเหลือ</th>
+         <th style="text-align:center">สถานะ</th>
+       </tr></thead><tbody>` +
+      rows.map(b=>{
         const left = Number(b.left_amount||0), days = Number(b.days_old||0);
-        const part = Number(b.paid_amount||0) > 0;
-        return `<div class="wr-card" style="margin-top:8px">
-          <div class="wr-head" style="display:flex;gap:10px;align-items:flex-start">
-            <input type="checkbox" style="width:20px;height:20px;flex:0 0 auto;margin-top:3px"
-                   ${LAB_SEL[b.bill_id]?'checked':''} onchange="labToggle(${b.bill_id},this.checked)">
-            <div style="flex:1">
-              <div><b>${b.job_no||''}</b>${b.customer_name?' · '+b.customer_name:''}
-                ${part?'<span class="badge badge-ret">จ่ายบางส่วน</span>':'<span class="badge badge-exp">ยังไม่จ่าย</span>'}
-                ${days>7?'<span class="badge badge-lock">ค้าง '+days+' วัน</span>':''}</div>
-              <div class="wr-meta">${b.bill_no||''} · ลงวันที่ ${fmtDate(b.bill_date)}
-                · สั่ง ${fmt(b.sets_ordered)} วง · เหลือ ${fmt(labLeftSets(b))} วง</div>
-            </div>
-            <div class="wr-amt mono ${left>0?'num-red':'num-green'}" style="text-align:right">${fmt2(left)}</div>
-          </div>
-        </div>`;
-      }).join('');
+        const paid = Number(b.paid_amount||0), part = paid > 0;
+        return `<tr>
+          <td style="text-align:center">
+            <input type="checkbox" style="width:19px;height:19px"
+                   ${LAB_SEL[b.bill_id]?'checked':''} onchange="labToggle(${b.bill_id},this.checked)"></td>
+          <td><b>${b.job_no||''}</b>
+              <div class="audit-time">${b.bill_no||''} · ${fmtDate(b.bill_date)}${
+                days>7 ? ' · <span style="color:var(--red)">ค้าง '+days+' วัน</span>' : ''}</div></td>
+          <td class="desc">${b.customer_name||'—'}</td>
+          <td class="mono" style="text-align:center">${fmt(b.sets_ordered)}</td>
+          <td class="mono num-norm" style="text-align:right">${fmt2(b.amount_expected)}</td>
+          <td class="mono ${part?'num-green':''}" style="text-align:right">${part?fmt2(paid):'—'}</td>
+          <td class="mono num-red" style="text-align:right"><b>${fmt2(left)}</b></td>
+          <td style="text-align:center">${part
+              ? '<span class="badge badge-ret">จ่ายบางส่วน</span>'
+              : '<span class="badge badge-exp">ยังไม่จ่าย</span>'}</td>
+        </tr>`;
+      }).join('') + '</tbody></table>';
   labUpdatePayBtn();
 }
 
