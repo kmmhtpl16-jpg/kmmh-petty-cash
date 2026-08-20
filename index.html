@@ -1044,7 +1044,7 @@ const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
-const APP_BUILD='2026-08-20-labour';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
+const APP_BUILD='2026-08-20-labour2';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
 let currentRole = null;      // null | 'cashier' | 'manager'
 let currentUser = null;      // row from petty_cash_users
 let currentPin  = '';        // 🪚 เก็บไว้ส่งให้ RPC ค่าแรงช่าง (ไม่แสดงบนจอ ไม่เก็บลง storage)
@@ -4286,18 +4286,19 @@ function openLabourPay(){
       <div class="labreasonwrap" data-bill="${b.bill_id}" style="display:none;margin-top:8px">
         <div class="cfg-label" style="color:#8a5b00">⚠️ <span class="labshort"></span> — ต้องใส่เหตุผล</div>
         <input class="cfg-input labreason" data-bill="${b.bill_id}" style="width:100%;margin-top:4px"
-               placeholder="เช่น ไม้ไม่พอ เหลือทำสัปดาห์หน้า">
+               oninput="labRecalc()" placeholder="เช่น ไม้ไม่พอ เหลือทำสัปดาห์หน้า">
       </div>
       <div class="labbillsum mono" data-bill="${b.bill_id}" style="text-align:right;margin-top:6px;font-weight:700"></div>
     </div>`;
   }).join('');
 
+  labSay('labMsg','');
   labRecalc();
   openModal('labourPayModal');
 }
 
 function labRecalc(){
-  let total = 0, bad = false;
+  let total = 0, bad = false, why = '';
   labSelected().forEach(b=>{
     let sets=0, amt=0;
     document.querySelectorAll(`.labsets[data-bill="${b.bill_id}"]`).forEach(i=>{
@@ -4316,18 +4317,20 @@ function labRecalc(){
       const lb = wrap.querySelector('.labshort');
       if(lb) lb.textContent = `จ่ายไม่ครบ (${fmt(sets)} จาก ${fmt(leftAll)} วง)`;
       const rs = wrap.querySelector('.labreason');
-      if(short && !(rs && rs.value.trim())) bad = true;
+      if(short && !(rs && rs.value.trim())){ bad = true; why = 'ยังไม่ได้ใส่เหตุผลที่จ่ายไม่ครบ'; }
     }
-    if(sets<=0) bad = true;
+    if(sets<=0){ bad = true; why = why || ('บิล '+(b.job_no||'')+' ยังไม่ได้ใส่จำนวนวง'); }
     const cell = document.querySelector(`.labbillsum[data-bill="${b.bill_id}"]`);
     if(cell) cell.textContent = fmt2(amt)+' บาท';
   });
   document.getElementById('labPaySum').innerHTML =
-    `<div class="sum-row sum-total"><span>รวมจ่ายครั้งนี้</span><span class="mono">${fmt2(total)} บาท</span></div>`;
+    `<div class="sum-row sum-total"><span>รวมจ่ายครั้งนี้</span><span class="mono">${fmt2(total)} บาท</span></div>`+
+    (why ? `<div class="sum-row" style="color:#8a5b00">⚠️ ${why} — ยังกดจ่ายไม่ได้</div>` : '');
   const go = document.getElementById('labPayGo');
   go.textContent = `✅ ยืนยันจ่าย ${fmt2(total)} บาท`;
   go.disabled = (total<=0) || bad;
   go.style.opacity = go.disabled ? .5 : 1;
+  go.style.cursor  = go.disabled ? 'not-allowed' : 'pointer';
 }
 
 async function doLabourPay(){
@@ -4364,6 +4367,9 @@ async function doLabourPay(){
     await loadLabour(true);
     render();
     showToast(`จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท แล้ว`,'success');
+    labSay('labMsg', `✅ จ่ายค่าแรงช่างแล้ว <b>${fmt2(data.total)} บาท</b> · บิล ${data.bill_nos}`+
+                     ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 เรียบร้อย`, 'ok');
+    switchTab('labour'); window.scrollTo({top:0, behavior:'smooth'});
   }catch(e){
     showToast('จ่ายไม่สำเร็จ: '+e.message,'error');
   }
@@ -4384,7 +4390,15 @@ function openLabourOther(){
 }
 function labPickKind(k){
   LAB_KIND = k;
-  document.querySelectorAll('.labkind').forEach(b=>b.classList.toggle('on', b.dataset.k===k));
+  document.querySelectorAll('.labkind').forEach(b=>{
+    const on = b.dataset.k === k;
+    b.classList.toggle('on', on);
+    /* แอปนี้ไม่มีสไตล์ .type-btn.on — ทาสีเองให้เห็นชัดว่าเลือกอันไหนอยู่ */
+    b.style.background  = on ? 'var(--green)' : '';
+    b.style.borderColor = on ? 'var(--green)' : '';
+    b.style.color       = on ? '#fff' : '';
+  });
+  labSay('labOtherMsg','');
 }
 async function doLabourOther(){
   const amt = Number(document.getElementById('labOtherAmt').value);
@@ -4408,6 +4422,9 @@ async function doLabourOther(){
     await loadLabour(true);
     render();
     showToast(`บันทึกค่าแรง ${LAB_KIND} ${fmt2(amt)} บาท แล้ว`,'success');
+    labSay('labMsg', `✅ บันทึกค่าแรงงานอื่น (<b>${LAB_KIND}</b>) <b>${fmt2(amt)} บาท</b>`+
+                     ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 เรียบร้อย`, 'ok');
+    switchTab('labour'); window.scrollTo({top:0, behavior:'smooth'});
   }catch(e){
     labSay('labOtherMsg','บันทึกไม่สำเร็จ: '+e.message);
   }
