@@ -367,6 +367,7 @@ tbody tr:hover td{background:#fafaf7}
   <button class="tab on" onclick="switchTab('entries')">📋 บันทึกรายการ</button>
   <button class="tab"    onclick="switchTab('summary')">📊 สรุปเดือน</button>
   <button class="tab"    onclick="switchTab('reconcile')">✅ ปิดก้อน / ตรวจนับ</button>
+  <button class="tab"    onclick="switchTab('labour')">🪚 ค่าแรงช่าง</button>
   <button class="tab"    onclick="switchTab('audit')">🔒 ประวัติ</button>
   <button class="tab"    onclick="switchTab('export')">📤 Export</button>
 </div>
@@ -504,6 +505,17 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 
 <!-- ─── VIEW: AUDIT ─── -->
+<div id="view-labour" style="display:none">
+  <div id="labMsg"></div>
+  <div class="cards" id="labCards"></div>
+  <div class="tbl-wrap" style="margin-top:12px"><div id="labList"></div></div>
+  <div class="toolbar no-print" style="margin-top:12px">
+    <button class="btn btn-green" id="labPayBtn" onclick="openLabourPay()">💵 จ่ายบิลที่เลือก</button>
+    <button class="btn btn-outline" onclick="openLabourOther()">➕ จ่ายค่าแรงงานอื่น (ไม่ใช่วงกบ)</button>
+    <button class="btn btn-outline" onclick="loadLabour(true)">↻ รีเฟรช</button>
+  </div>
+</div>
+
 <div id="view-audit" style="display:none">
   <div class="sum-box">
     <div class="sum-head">
@@ -620,6 +632,33 @@ tbody tr:hover td{background:#fafaf7}
 </div><!-- /app -->
 
 <!-- ─── FORM MODAL ─── -->
+<div class="modal-bg" id="labourPayModal">
+<div class="modal">
+  <h2>💵 จ่ายค่าแรงช่าง</h2>
+  <div id="labPayHead" class="audit-time" style="margin-bottom:10px"></div>
+  <div id="labPayBody"></div>
+  <div id="labPaySum" class="sum-box" style="margin-top:12px"></div>
+  <div class="modal-btns">
+    <button class="btn btn-green" id="labPayGo" onclick="doLabourPay()">✅ ยืนยันจ่าย</button>
+    <button class="btn btn-outline" onclick="closeModal('labourPayModal')">ยกเลิก</button>
+  </div>
+</div></div>
+
+<div class="modal-bg" id="labourOtherModal">
+<div class="modal">
+  <h2>➕ ค่าแรงช่าง — งานที่ไม่ใช่วงกบ</h2>
+  <div class="audit-time" style="margin-bottom:10px">ลงรหัสเดิม <b>5211-20</b> เหมือนกัน แค่ติดป้ายว่าเป็นงานประเภทไหน</div>
+  <div class="field"><label>ประเภทงาน (บังคับเลือก)</label>
+    <div id="labKinds"></div></div>
+  <div class="field"><label>จำนวนเงิน (บาท)</label>
+    <input type="number" id="labOtherAmt" min="0" step="0.01" placeholder="0.00"></div>
+  <div id="labOtherMsg"></div>
+  <div class="modal-btns">
+    <button class="btn btn-green" onclick="doLabourOther()">✅ บันทึกรายการ</button>
+    <button class="btn btn-outline" onclick="closeModal('labourOtherModal')">ยกเลิก</button>
+  </div>
+</div></div>
+
 <div class="modal-bg" id="formModal">
 <div class="modal">
   <h2 id="formTitle">เพิ่มรายการใหม่</h2>
@@ -1005,9 +1044,10 @@ const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
-const APP_BUILD='2026-07-15c';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
+const APP_BUILD='2026-08-20-labour';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
 let currentRole = null;      // null | 'cashier' | 'manager'
 let currentUser = null;      // row from petty_cash_users
+let currentPin  = '';        // 🪚 เก็บไว้ส่งให้ RPC ค่าแรงช่าง (ไม่แสดงบนจอ ไม่เก็บลง storage)
 let pinBuffer = '';
 let month = '';              // 'YYYY-MM'
 let currentPeriod = null;    // row from petty_cash_periods
@@ -1090,6 +1130,7 @@ async function submitPin(){
     // สำเร็จ — รีเซ็ต counter
     _loginAttempts = 0;
     currentUser = data;
+    currentPin  = pin;
     currentRole = data.role; // 'cashier' | 'manager'
     setLoginLoading('');
     await enterApp();
@@ -1157,7 +1198,8 @@ async function enterApp(){
 
 function doLogout(){
   if(!confirm('ออกจากระบบ?')) return;
-  currentRole=null; currentUser=null; pinBuffer='';
+  currentRole=null; currentUser=null; currentPin=''; pinBuffer='';
+  LAB={rows:[],other:{},loaded:false,loading:false};
   updatePinDots();
   document.getElementById('pinError').textContent='';
   document.getElementById('loginScreen').style.display='flex';
@@ -1443,6 +1485,7 @@ function render(){
     : '<span class="period-open-badge">🟢 เปิดอยู่</span>';
   const pact=document.getElementById('periodActions');
   pact.innerHTML='';  // ลบปุ่ม "ปิดยอดเดือนนี้" (ชื่อหลอก + เรียก closeKon ซ้ำกับแท็บปิดก้อน) — ปิดก้อนผ่านแท็บ "ปิดก้อน/ตรวจนับ" เท่านั้น
+  if(!LAB.loaded && !LAB.loading && currentRole!=='auditor') loadLabour(false);
   renderAlerts(); renderCards(); renderDiff(); renderTable();
   if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
   if(document.getElementById('view-reconcile').style.display!=='none'){ renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
@@ -1478,6 +1521,14 @@ function renderAlerts(){
     h+=`<div class="alert alert-info">🔒 <span>รายการก่อนวันที่ ${fmtDate(lockCutoff())} ถูกล็อกแล้ว</span></div>`;
   if(currentPeriod?.is_locked)
     h+=`<div class="alert alert-info">🔒 <span><strong>งวดนี้ปิดยอดแล้ว</strong> — ไม่สามารถเพิ่ม/แก้ไข/ลบรายการได้</span></div>`;
+  // 🪚 บิลค่าแรงช่างค้างจ่าย — ใช้แถบเดิม ไม่เพิ่มกระดิ่ง
+  if(LAB.loaded && LAB.rows.length && currentRole!=='auditor'){
+    const owe = LAB.rows.reduce((s,b)=>s+Number(b.left_amount||0),0);
+    const late = LAB.rows.filter(b=>Number(b.days_old||0)>7).length;
+    h+=`<div class="alert alert-warn" style="cursor:pointer" onclick="switchTab('labour')">🟡 <span>มีบิลค่าแรงช่างค้างจ่าย <strong>${LAB.rows.length} ใบ</strong> รวม <strong>${fmt2(owe)} บาท</strong>`+
+       (late?` — <strong>${late} ใบค้างเกิน 7 วัน</strong>`:'')+
+       ` — <strong style="text-decoration:underline">แตะเพื่อดู</strong></span></div>`;
+  }
   document.getElementById('alertArea').innerHTML=h;
 }
 
@@ -1765,9 +1816,9 @@ function switchTab(v){
   // v5: ปิด flow เก่า — tab 'count' และ 'withdraw' ถูกถอดออกจาก nav แล้ว
   // map การคลิกเก่า (ถ้ามี) ให้ไปลง reconcile แทน กัน null error
   if(v==='count'||v==='withdraw') v='reconcile';
-  const NAV=['entries','summary','reconcile','audit','export'];   // ต้องตรงลำดับปุ่มใน .tabs
+  const NAV=['entries','summary','reconcile','labour','audit','export'];   // ต้องตรงลำดับปุ่มใน .tabs
   // ซ่อน/แสดง view ทั้งหมด (รวม view เก่าที่ยังอยู่ใน DOM แต่ไม่มีปุ่มแล้ว)
-  ['entries','count','summary','reconcile','withdraw','audit','export'].forEach(t=>{
+  ['entries','count','summary','reconcile','withdraw','labour','audit','export'].forEach(t=>{
     const el=document.getElementById('view-'+t);
     if(el) el.style.display=(t===v)?'block':'none';
   });
@@ -1777,6 +1828,7 @@ function switchTab(v){
   if(v==='summary') renderSummary();
   if(v==='reconcile'){ renderDailyCount(); renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
   if(v==='audit') renderAudit();
+  if(v==='labour') loadLabour(true);
 }
 
 // ══════════════════════════════════════════════
@@ -4123,6 +4175,245 @@ function fmtDatetime(ts){
   return `${g('day')}/${g('month')}/${+g('year')+543} ${g('hour')}:${g('minute')}`;
 }
 
+
+// ══════════════════════════════════════════════
+// 🪚 ค่าแรงช่างวงกบ (เฟส 2) — บิลค่าแรง + ตัดจ่ายจากเงินสดย่อย
+//    บิลเกิดตอน "ส่งเข้ารายการผลิต" ในโปรแกรมวงกบ · ที่นี่มีหน้าที่ "จ่าย" อย่างเดียว
+// ══════════════════════════════════════════════
+let LAB = {rows:[], other:{}, loaded:false, loading:false};
+let LAB_SEL = {};          // bill_id -> true
+let LAB_KIND = '';
+const LAB_KINDS = ['ไสไม้','ตัดไม้','ซ่อม/แก้งาน','ประกอบ/ติดตั้ง','อื่น ๆ'];
+
+function labSay(el,txt,cls){ const e=document.getElementById(el); if(e) e.innerHTML = txt?`<div class="alert alert-${cls||'danger'}"><span>${txt}</span></div>`:''; }
+
+async function loadLabour(showUi){
+  if(LAB.loading) return;
+  LAB.loading = true;
+  try{
+    const {data,error} = await sb.rpc('fr_labour_bill_list',{p_pin:currentPin, p_show_closed:false});
+    if(error) throw new Error(error.message);
+    if(!data || !data.ok) throw new Error((data&&data.error)||'อ่านข้อมูลบิลไม่ได้');
+    LAB.rows = data.rows||[]; LAB.other = data.other_month||{}; LAB.today = data.today;
+    LAB.loaded = true;
+    // ล้างการเลือกของบิลที่หายไปแล้ว
+    Object.keys(LAB_SEL).forEach(k=>{ if(!LAB.rows.some(b=>String(b.bill_id)===k)) delete LAB_SEL[k]; });
+    renderAlerts();
+    if(showUi!==false) renderLabour();
+  }catch(e){
+    LAB.loaded = false;
+    if(showUi!==false) labSay('labMsg','โหลดบิลค่าแรงไม่สำเร็จ: '+e.message);
+  }finally{ LAB.loading = false; }
+}
+
+function labLeftSets(b){ return Number(b.sets_ordered||0) - Number(b.paid_sets||0); }
+
+function renderLabour(){
+  const rows = LAB.rows||[];
+  const owe  = rows.reduce((s,b)=>s+Number(b.left_amount||0),0);
+  const sets = rows.reduce((s,b)=>s+labLeftSets(b),0);
+  const o    = LAB.other||{};
+  const paid = Number(o.paid_total||0), linked = Number(o.linked||0);
+  document.getElementById('labCards').innerHTML=`
+    <div class="card"><div class="card-lbl">บิลค้างจ่าย</div><div class="card-val ${owe>0?'red':''} mono">${fmt(owe)}</div><div class="card-sub">${rows.length} ใบ · ${fmt(sets)} วง</div></div>
+    <div class="card"><div class="card-lbl">จ่ายแล้ว (ผูกบิล)</div><div class="card-val green mono">${fmt(linked)}</div><div class="card-sub">เดือนนี้</div></div>
+    <div class="card"><div class="card-lbl">จ่าย 5211-20 ทั้งเดือน</div><div class="card-val mono">${fmt(paid)}</div><div class="card-sub">${o.n||0} รายการ</div></div>
+    <div class="card"><div class="card-lbl">ยังไม่ผูกบิล</div><div class="card-val amber mono">${fmt(paid-linked)}</div><div class="card-sub">งานอื่น / ยังไม่ระบุ</div></div>`;
+
+  document.getElementById('labList').innerHTML = !rows.length
+    ? '<div class="empty">ไม่มีบิลค่าแรงค้างจ่าย 🎉</div>'
+    : rows.map(b=>{
+        const left = Number(b.left_amount||0), days = Number(b.days_old||0);
+        const part = Number(b.paid_amount||0) > 0;
+        return `<div class="wr-card" style="margin-top:8px">
+          <div class="wr-head" style="display:flex;gap:10px;align-items:flex-start">
+            <input type="checkbox" style="width:20px;height:20px;flex:0 0 auto;margin-top:3px"
+                   ${LAB_SEL[b.bill_id]?'checked':''} onchange="labToggle(${b.bill_id},this.checked)">
+            <div style="flex:1">
+              <div><b>${b.job_no||''}</b>${b.customer_name?' · '+b.customer_name:''}
+                ${part?'<span class="badge badge-ret">จ่ายบางส่วน</span>':'<span class="badge badge-exp">ยังไม่จ่าย</span>'}
+                ${days>7?'<span class="badge badge-lock">ค้าง '+days+' วัน</span>':''}</div>
+              <div class="wr-meta">${b.bill_no||''} · ลงวันที่ ${fmtDate(b.bill_date)}
+                · สั่ง ${fmt(b.sets_ordered)} วง · เหลือ ${fmt(labLeftSets(b))} วง</div>
+            </div>
+            <div class="wr-amt mono ${left>0?'num-red':'num-green'}" style="text-align:right">${fmt2(left)}</div>
+          </div>
+        </div>`;
+      }).join('');
+  labUpdatePayBtn();
+}
+
+function labToggle(id, on){ if(on) LAB_SEL[id]=true; else delete LAB_SEL[id]; labUpdatePayBtn(); }
+function labSelected(){ return (LAB.rows||[]).filter(b=>LAB_SEL[b.bill_id]); }
+function labUpdatePayBtn(){
+  const s = labSelected();
+  const sum = s.reduce((a,b)=>a+Number(b.left_amount||0),0);
+  const btn = document.getElementById('labPayBtn');
+  if(btn) btn.textContent = s.length ? `💵 จ่ายบิลที่เลือก (${s.length} ใบ · ${fmt(sum)} บาท)` : '💵 จ่ายบิลที่เลือก';
+}
+
+// ── หน้าต่างจ่าย ──────────────────────────────────────────
+function openLabourPay(){
+  const sel = labSelected();
+  if(!sel.length){ showToast('ยังไม่ได้เลือกบิล','error'); return; }
+  if(currentRole==='auditor'){ showToast('ผู้ตรวจสอบบันทึกรายการไม่ได้','error'); return; }
+  if(!currentPeriod){ showToast('ยังไม่ได้เปิดงวดเงินสดย่อย','error'); return; }
+  if(currentPeriod.is_locked){ showToast('งวดนี้ปิดยอดแล้ว','error'); return; }
+
+  document.getElementById('labPayHead').innerHTML =
+    `ลงเป็นรายจ่ายเงินสดย่อย รหัส <b>5211-20 ค่าจ้าง - ช่างทำวงกบ</b>`+
+    (currentOpenKon?` · ก้อนที่ ${currentOpenKon.kon_number}`:'')+
+    ` · วันที่ ${fmtDate(todayStr())}`;
+
+  document.getElementById('labPayBody').innerHTML = sel.map(b=>{
+    const lines = (b.lines||[]).map(l=>{
+      const leftL = Number(l.qty||0) - Number(l.paid_sets||0);
+      if(leftL<=0) return '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <div style="flex:1;min-width:180px;font-size:13px">${l.descr||('รายการที่ '+l.seq)}
+          <span class="audit-time">เหลือ ${fmt(leftL)} วง × ${fmt(l.rate)} บาท</span></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" class="cfg-input labsets" style="width:80px" min="0" max="${leftL}" step="1"
+                 data-bill="${b.bill_id}" data-seq="${l.seq}" data-rate="${l.rate}" data-left="${leftL}"
+                 value="${leftL}" oninput="labRecalc()">
+          <span class="cfg-unit">วง</span>
+        </div></div>`;
+    }).join('');
+    return `<div class="wr-card" data-billcard="${b.bill_id}" style="margin-top:10px">
+      <div><b>${b.job_no||''}</b>${b.customer_name?' · '+b.customer_name:''}
+        <span class="audit-time">${b.bill_no} · เหลือ ${fmt(labLeftSets(b))} วง / ${fmt2(b.left_amount)} บาท</span></div>
+      ${lines}
+      <div class="labreasonwrap" data-bill="${b.bill_id}" style="display:none;margin-top:8px">
+        <div class="cfg-label" style="color:#8a5b00">⚠️ <span class="labshort"></span> — ต้องใส่เหตุผล</div>
+        <input class="cfg-input labreason" data-bill="${b.bill_id}" style="width:100%;margin-top:4px"
+               placeholder="เช่น ไม้ไม่พอ เหลือทำสัปดาห์หน้า">
+      </div>
+      <div class="labbillsum mono" data-bill="${b.bill_id}" style="text-align:right;margin-top:6px;font-weight:700"></div>
+    </div>`;
+  }).join('');
+
+  labRecalc();
+  openModal('labourPayModal');
+}
+
+function labRecalc(){
+  let total = 0, bad = false;
+  labSelected().forEach(b=>{
+    let sets=0, amt=0;
+    document.querySelectorAll(`.labsets[data-bill="${b.bill_id}"]`).forEach(i=>{
+      const max = Number(i.dataset.left)||0;
+      let v = Number(i.value);
+      if(!isFinite(v) || v<0) v = 0;
+      if(v>max){ v = max; i.value = max; }
+      sets += v; amt += v * Number(i.dataset.rate||0);
+    });
+    total += amt;
+    const leftAll = labLeftSets(b);
+    const wrap = document.querySelector(`.labreasonwrap[data-bill="${b.bill_id}"]`);
+    const short = sets < leftAll;
+    if(wrap){
+      wrap.style.display = short ? 'block' : 'none';
+      const lb = wrap.querySelector('.labshort');
+      if(lb) lb.textContent = `จ่ายไม่ครบ (${fmt(sets)} จาก ${fmt(leftAll)} วง)`;
+      const rs = wrap.querySelector('.labreason');
+      if(short && !(rs && rs.value.trim())) bad = true;
+    }
+    if(sets<=0) bad = true;
+    const cell = document.querySelector(`.labbillsum[data-bill="${b.bill_id}"]`);
+    if(cell) cell.textContent = fmt2(amt)+' บาท';
+  });
+  document.getElementById('labPaySum').innerHTML =
+    `<div class="sum-row sum-total"><span>รวมจ่ายครั้งนี้</span><span class="mono">${fmt2(total)} บาท</span></div>`;
+  const go = document.getElementById('labPayGo');
+  go.textContent = `✅ ยืนยันจ่าย ${fmt2(total)} บาท`;
+  go.disabled = (total<=0) || bad;
+  go.style.opacity = go.disabled ? .5 : 1;
+}
+
+async function doLabourPay(){
+  const sel = labSelected();
+  const items = sel.map(b=>{
+    const lines = [];
+    document.querySelectorAll(`.labsets[data-bill="${b.bill_id}"]`).forEach(i=>{
+      const v = Number(i.value)||0;
+      if(v>0) lines.push({seq:Number(i.dataset.seq), sets:v});
+    });
+    const rs = document.querySelector(`.labreason[data-bill="${b.bill_id}"]`);
+    return {bill_id:b.bill_id, lines, reason:(rs&&rs.value.trim())||null};
+  }).filter(x=>x.lines.length);
+  if(!items.length){ showToast('ยังไม่ได้ใส่จำนวนวง','error'); return; }
+
+  showLoading(true,'บันทึกการจ่าย...');
+  try{
+    const {data,error} = await sb.rpc('fr_labour_pay',{
+      p_pin: currentPin,
+      p_tx_date: todayStr(),
+      p_period_id: currentPeriod.id,
+      p_kon_number: currentOpenKon ? currentOpenKon.kon_number : null,
+      p_by_name: (currentUser&&currentUser.name) || currentRole,
+      p_items: items
+    });
+    if(error) throw new Error(error.message);
+    if(!data || !data.ok) throw new Error((data&&data.error)||'บันทึกไม่สำเร็จ');
+    closeModal('labourPayModal');
+    LAB_SEL = {};
+    await addAudit('add', `จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท | บิล: ${data.bill_nos} | `+
+                          `ผู้ทำรายการ: ${(currentUser&&currentUser.name)||currentRole} (${currentRole})`);
+    await loadTransactions();
+    await loadCurrentKon();
+    await loadLabour(true);
+    render();
+    showToast(`จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท แล้ว`,'success');
+  }catch(e){
+    showToast('จ่ายไม่สำเร็จ: '+e.message,'error');
+  }
+  showLoading(false);
+}
+
+// ── หน้าต่างงานอื่น ───────────────────────────────────────
+function openLabourOther(){
+  if(currentRole==='auditor'){ showToast('ผู้ตรวจสอบบันทึกรายการไม่ได้','error'); return; }
+  if(!currentPeriod){ showToast('ยังไม่ได้เปิดงวดเงินสดย่อย','error'); return; }
+  if(currentPeriod.is_locked){ showToast('งวดนี้ปิดยอดแล้ว','error'); return; }
+  LAB_KIND = '';
+  document.getElementById('labKinds').innerHTML = LAB_KINDS.map(k=>
+    `<button type="button" class="type-btn labkind" data-k="${k}" onclick="labPickKind('${k}')">${k}</button>`).join(' ');
+  document.getElementById('labOtherAmt').value='';
+  labSay('labOtherMsg','');
+  openModal('labourOtherModal');
+}
+function labPickKind(k){
+  LAB_KIND = k;
+  document.querySelectorAll('.labkind').forEach(b=>b.classList.toggle('on', b.dataset.k===k));
+}
+async function doLabourOther(){
+  const amt = Number(document.getElementById('labOtherAmt').value);
+  if(!LAB_KIND){ labSay('labOtherMsg','ต้องแตะเลือกประเภทงานก่อน'); return; }
+  if(!(amt>0)){ labSay('labOtherMsg','ใส่จำนวนเงินให้มากกว่า 0'); return; }
+  showLoading(true,'บันทึกรายการ...');
+  try{
+    const {data,error} = await sb.rpc('fr_labour_other_pay',{
+      p_pin: currentPin, p_tx_date: todayStr(), p_period_id: currentPeriod.id,
+      p_kon_number: currentOpenKon ? currentOpenKon.kon_number : null,
+      p_by_name: (currentUser&&currentUser.name) || currentRole,
+      p_kind: LAB_KIND, p_amount: amt
+    });
+    if(error) throw new Error(error.message);
+    if(!data || !data.ok) throw new Error((data&&data.error)||'บันทึกไม่สำเร็จ');
+    closeModal('labourOtherModal');
+    await addAudit('add', `ค่าแรงช่างงานอื่น (${LAB_KIND}) ${fmt2(amt)} บาท | `+
+                          `ผู้ทำรายการ: ${(currentUser&&currentUser.name)||currentRole} (${currentRole})`);
+    await loadTransactions();
+    await loadCurrentKon();
+    await loadLabour(true);
+    render();
+    showToast(`บันทึกค่าแรง ${LAB_KIND} ${fmt2(amt)} บาท แล้ว`,'success');
+  }catch(e){
+    labSay('labOtherMsg','บันทึกไม่สำเร็จ: '+e.message);
+  }
+  showLoading(false);
+}
+
 // ══════════════════════════════════════════════
 // MODAL / UTILITY HELPERS
 // ══════════════════════════════════════════════
@@ -4131,7 +4422,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
-  ['formModal','closeMonthModal','reviewKonModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{
+  ['formModal','closeMonthModal','reviewKonModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal','labourPayModal','labourOtherModal'].forEach(id=>{
     const el=document.getElementById(id);
     if(el&&el.classList.contains('open')&&e.target===el) closeModal(id);
   });
@@ -4139,7 +4430,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
-    ['formModal','closeMonthModal','reviewKonModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
+    ['formModal','closeMonthModal','reviewKonModal','preCountModal','wrAuditModal','wrMgrModal','countAuditModal','deleteCountModal','returnCashModal','labourPayModal','labourOtherModal'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList.contains('open')) closeModal(id); });
   }
 });
 
@@ -4287,7 +4578,7 @@ scheduleDailyTelegram();
         setLoginLoading(''); return;
       }
       if(j.access_token){ await sb.auth.setSession({ access_token:j.access_token, refresh_token:j.refresh_token }); }
-      _loginAttempts = 0; currentUser = data; currentRole = data.role;
+      _loginAttempts = 0; currentUser = data; currentPin = pin; currentRole = data.role;
       setLoginLoading(''); await enterApp();
     }catch(e){ showLoginError('❌ เชื่อมต่อ Supabase ล้มเหลว: ' + e.message); setLoginLoading(''); }
   };
