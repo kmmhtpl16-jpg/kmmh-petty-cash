@@ -243,6 +243,12 @@ tbody tr:hover td{background:#fafaf7}
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:900;opacity:0;pointer-events:none;transition:opacity .18s}
 .lightbox.open{opacity:1;pointer-events:all}
 .lightbox img{max-width:92vw;max-height:88vh;border-radius:8px;object-fit:contain}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.92);border:none;width:48px;height:48px;border-radius:50%;font-size:30px;line-height:1;cursor:pointer;color:#222;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.lb-prev{left:14px}
+.lb-next{right:14px}
+.lb-count{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;font-size:13px;padding:5px 14px;border-radius:999px}
+.lb-close{position:absolute;top:14px;right:16px;background:rgba(255,255,255,.92);border:none;width:38px;height:38px;border-radius:50%;font-size:19px;cursor:pointer;color:#222;display:flex;align-items:center;justify-content:center}
+.rcount{position:absolute;top:-5px;right:-5px;background:var(--dark);color:#fff;font-size:9px;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;font-weight:700}
 
 /* ── Toast / Loading ── */
 #toast{position:fixed;bottom:20px;right:20px;background:var(--dark);color:#f0ece0;border-radius:10px;padding:10px 16px;font-size:13px;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;z-index:9999;max-width:280px}
@@ -970,7 +976,11 @@ tbody tr:hover td{background:#fafaf7}
 
 <!-- ─── LIGHTBOX ─── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <img id="lightboxImg" src="" alt="receipt">
+  <button class="lb-nav lb-prev" id="lbPrev" onclick="event.stopPropagation();lbStep(-1)" title="รูปก่อนหน้า">&#8249;</button>
+  <img id="lightboxImg" src="" alt="receipt" onclick="event.stopPropagation()">
+  <button class="lb-nav lb-next" id="lbNext" onclick="event.stopPropagation();lbStep(1)" title="รูปถัดไป">&#8250;</button>
+  <button class="lb-close" onclick="closeLightbox()" title="ปิด">&#10005;</button>
+  <div class="lb-count" id="lbCount"></div>
 </div>
 
 <div id="toast"></div>
@@ -1000,11 +1010,12 @@ async function receiptSignedUrl(u, transform){
   }catch(e){ console.warn('signedUrl', e.message); return null; }
 }
 async function hydrateReceiptThumbs(){
-  const imgs=document.querySelectorAll('img.receipt-thumb[data-rthumb]');
+  const imgs=document.querySelectorAll('img[data-rthumb]');
   for(const el of imgs){
     const raw=decodeURIComponent(el.getAttribute('data-rthumb'));
     el.removeAttribute('data-rthumb');
-    const url=await receiptSignedUrl(raw, {width:72,height:72,resize:'cover',quality:60});
+    const n=Number(el.getAttribute('data-rsize'))||72;
+    const url=await receiptSignedUrl(raw, {width:n,height:n,resize:'cover',quality:60});
     if(url) el.src=url;
   }
 }
@@ -1571,7 +1582,7 @@ function renderTable(){
     let imgUrls=[];
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
     const receiptBtn=imgUrls.length>0
-      ?`<img data-rthumb="${encodeURIComponent(imgUrls[0])}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy" style="min-width:36px;min-height:36px;background:#f1f5f9">`
+      ?`<span style="position:relative;display:inline-block;line-height:0"><img data-rthumb="${encodeURIComponent(imgUrls[0])}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy" style="min-width:36px;min-height:36px;background:#f1f5f9">${imgUrls.length>1?`<span class="rcount">${imgUrls.length}</span>`:''}</span>`
       :`<span style="color:var(--muted2);font-size:11px">—</span>`;
     const periodLocked=currentPeriod?.is_locked;
     const editDelBtns=`<button class="btn btn-sm btn-edit" onclick="openEditTx('${tx.id}')">แก้ไข</button><button class="btn btn-sm btn-del" onclick="deleteTx('${tx.id}')">ลบ</button>`;
@@ -2281,7 +2292,7 @@ function renderImgPreview(){
   // แสดงรูปเก่า (Storage URL) + รูปใหม่ (blob URL preview)
   const existingHTML = existingImageUrls.map((url,i)=>
     `<div class="img-thumb">
-      <img src="${url}" loading="lazy">
+      <img data-rthumb="${encodeURIComponent(url)}" data-rsize="320" loading="lazy" style="background:#f1f5f9;cursor:pointer" onclick="showLightboxEdit(${i})" title="กดเพื่อดูรูปเต็ม">
       <button class="img-del" onclick="removeExistingImg(${i})" title="ลบรูปเก่า">×</button>
     </div>`
   ).join('');
@@ -2292,6 +2303,7 @@ function renderImgPreview(){
     </div>`
   ).join('');
   document.getElementById('imgPreview').innerHTML = existingHTML + newHTML;
+  hydrateReceiptThumbs();
 }
 
 function removeExistingImg(i){
@@ -2601,20 +2613,48 @@ async function deleteTx(id){
   showLoading(false);
 }
 
-// Receipt lightbox — แสดงรูปจาก Supabase Storage URL
+// Receipt lightbox — เปิดดูได้ทุกรูป (เดิมเปิดได้แค่รูปแรก)
+let lbUrls=[], lbIdx=0;
+async function lbOpen(rawUrls, startAt){
+  const list=(rawUrls||[]).filter(Boolean);
+  if(!list.length) return;
+  lbUrls = await Promise.all(list.map(async u => (await receiptSignedUrl(u)) || u));
+  lbIdx  = Math.min(Math.max(Number(startAt)||0, 0), lbUrls.length-1);
+  lbShow();
+  document.getElementById('lightbox').classList.add('open');
+}
+function lbShow(){
+  const img=document.getElementById('lightboxImg');
+  if(!img||!lbUrls.length) return;
+  img.src = lbUrls[lbIdx] || '';
+  const many = lbUrls.length>1;
+  const c=document.getElementById('lbCount');
+  if(c){ c.textContent = many ? ('รูปที่ '+(lbIdx+1)+' จาก '+lbUrls.length) : ''; c.style.display = many?'':'none'; }
+  ['lbPrev','lbNext'].forEach(id=>{ const b=document.getElementById(id); if(b) b.style.display = many?'':'none'; });
+}
+function lbStep(d){
+  if(lbUrls.length<2) return;
+  lbIdx = (lbIdx + d + lbUrls.length) % lbUrls.length;
+  lbShow();
+}
 async function showLightboxTx(id){
   const tx=transactions.find(t=>t.id===id);
   if(!tx||!tx.image_urls) return;
-  try{
-    const imgs=JSON.parse(tx.image_urls);
-    if(imgs.length){
-      const url=await receiptSignedUrl(imgs[0]);
-      document.getElementById('lightboxImg').src=url||imgs[0];
-      document.getElementById('lightbox').classList.add('open');
-    }
-  }catch{}
+  let imgs=[];
+  try{ imgs=JSON.parse(tx.image_urls)||[]; }catch{ return; }
+  await lbOpen(imgs, 0);
 }
+/* เปิดจากรูปในหน้าแก้ไขรายการ — เริ่มที่ใบที่กด */
+async function showLightboxEdit(i){ await lbOpen(existingImageUrls, i); }
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
+/* ปุ่มลูกศรซ้าย-ขวา + Esc */
+document.addEventListener('keydown', e=>{
+  const box=document.getElementById('lightbox');
+  if(!box || !box.classList.contains('open')) return;
+  if(e.key==='ArrowLeft'){ e.preventDefault(); lbStep(-1); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); lbStep(1); }
+  else if(e.key==='Escape'){ e.preventDefault(); closeLightbox(); }
+});
 
 // ══════════════════════════════════════════════
 // CLOSE KON — 3-TIER APPROVAL FLOW
