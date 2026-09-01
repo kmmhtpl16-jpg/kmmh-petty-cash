@@ -1223,6 +1223,43 @@ function doLogout(){
 // ══════════════════════════════════════════════
 // LOAD DATA — Supabase
 // ══════════════════════════════════════════════
+// ── สูตรยอดยกมา (จุดเดียวจบ) = closing() ของเดือนก่อนเป๊ะ ๆ
+//    เดิมมี 2 สูตรคนละที่ (ตอนสร้างงวด กรองรายรับเฉพาะ 1111-30 / ปุ่มดึงอัตโนมัติไม่กรอง) → รวมเป็นอันเดียว
+async function carryFromMonth(mk){
+  const {data:pP,error:pe}=await sb.from('petty_cash_periods').select('id,open_bal').eq('month_key',mk).limit(1);
+  if(pe) throw new Error('อ่านงวดเดือนก่อนไม่ได้: '+pe.message);
+  if(!pP||pP.length===0) return {found:false,carry:0};
+  const {data:pTx,error:te}=await sb.from('petty_cash_transactions').select('tx_type,amount,acc_code,description').eq('period_id',pP[0].id);
+  if(te) throw new Error('อ่านรายการเดือนก่อนไม่ได้: '+te.message);
+  const rows=pTx||[];
+  const inc=rows.filter(t=>t.tx_type==='income'&&!(t.description||'').includes('สำรอง')).reduce((a,t)=>a+parseFloat(t.amount||0),0);
+  const exp=rows.filter(t=>t.tx_type==='expense'&&!isKonDebt(t)).reduce((a,t)=>a+parseFloat(t.amount||0),0);
+  const ret=rows.filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10'&&(t.description||'').includes('คืนเงินสดย่อย')).reduce((a,t)=>a+parseFloat(t.amount||0),0);
+  return {found:true,carry:(parseFloat(pP[0].open_bal)||0)+inc-exp-ret};
+}
+
+// ── งวดที่ถูกสร้างค้างไว้ล่วงหน้า (ยอดยกมา 0 + ยังไม่มีรายการ/ก้อนเลย) → เติมยอดยกมาให้อัตโนมัติ
+//    ต้นเหตุเคส ก.ย.69: แถวงวดถูกสร้างตั้งแต่ 03/06/69 ระบบเลยข้ามการคำนวณยกมาตลอดไป
+async function backfillOpeningIfEmpty(){
+  try{
+    if(!currentPeriod||currentPeriod.is_locked) return;
+    if(Math.abs(parseFloat(currentPeriod.open_bal)||0)>0.005) return;
+    const [cTx,cKon]=await Promise.all([
+      sb.from('petty_cash_transactions').select('id',{count:'exact',head:true}).eq('period_id',currentPeriod.id),
+      sb.from('petty_cash_kon').select('id',{count:'exact',head:true}).eq('period_id',currentPeriod.id)
+    ]);
+    if((cTx.count||0)>0||(cKon.count||0)>0) return;
+    const pm=prevMonth();
+    const {found,carry}=await carryFromMonth(pm);
+    if(!found||Math.abs(carry)<0.005) return;
+    const {error:ue}=await sb.from('petty_cash_periods').update({open_bal:carry}).eq('id',currentPeriod.id);
+    if(ue) throw new Error(ue.message);
+    currentPeriod.open_bal=carry;
+    await addAudit('edit',`เติมยอดยกมาอัตโนมัติจากเดือน ${pm} = ${fmt2(carry)} บาท (งวดถูกสร้างไว้ล่วงหน้า ยอดยกมาค้างที่ 0)`);
+    showToast(`เติมยอดยกมา ${fmt2(carry)} บาท จากเดือนก่อนให้แล้ว`,'success');
+  }catch(e){ showToast('เติมยอดยกมาไม่สำเร็จ: '+e.message,'error'); }
+}
+
 async function loadPeriodForMonth(){
   showLoading(true,'โหลดข้อมูลงวด...');
   try{
@@ -1231,29 +1268,15 @@ async function loadPeriodForMonth(){
       .select('*').eq('month_key',month).limit(1);
 
     if(!periods||periods.length===0){
-      // ไม่มี period สำหรับเดือนนี้ → สร้างใหม่
-      // หายอดปิดเดือนก่อน (carry forward)
-      const prevM=prevMonth();
-      let carryBal=0;
-      const {data:prevPeriod}=await sb.from('petty_cash_periods')
-        .select('id,open_bal').eq('month_key',prevM).limit(1);
-      if(prevPeriod&&prevPeriod.length>0){
-        // คำนวณยอดปิดเดือนก่อน — ตรงกับ closing() เป๊ะ (exclude "สำรอง", subtract cashReturn)
-        const {data:prevTx}=await sb.from('petty_cash_transactions')
-          .select('tx_type,amount,acc_code,description').eq('period_id',prevPeriod[0].id);
-        const prevIn=(prevTx||[]).filter(t=>
-          t.tx_type==='income'&&t.acc_code==='1111-30'&&
-          !(t.description||'').includes('สำรอง')
-        ).reduce((s,t)=>s+parseFloat(t.amount),0);
-        const prevOut=(prevTx||[]).filter(t=>
-          t.tx_type==='expense'&&!isKonDebt(t)
-        ).reduce((s,t)=>s+parseFloat(t.amount),0);
-        const prevReturn=(prevTx||[]).filter(t=>
-          t.tx_type==='expense'&&t.acc_code==='1111-10'&&
-          (t.description||'').includes('คืนเงินสดย่อย')
-        ).reduce((s,t)=>s+parseFloat(t.amount),0);
-        carryBal=(parseFloat(prevPeriod[0].open_bal)||0)+prevIn-prevOut-prevReturn;
+      // 🚧 ห้ามสร้างงวดของเดือนในอนาคต — ต้นเหตุเคส ก.ย.69 (เลื่อนดูเดือนหน้าเล่น ๆ แล้วระบบสร้างแถวยอดยกมา 0 ค้างไว้)
+      if(month>bkkMonth()){
+        showToast('ยังเปิดงวดเดือนในอนาคตไม่ได้ — รอให้ถึงเดือนนั้นก่อน','error');
+        document.getElementById('periodBar').style.display='none';
+        showLoading(false); return;
       }
+      // ไม่มี period สำหรับเดือนนี้ → สร้างใหม่ พร้อมยอดยกมาจากเดือนก่อน
+      const prevM=prevMonth();
+      const carryBal=(await carryFromMonth(prevM)).carry;
       // หา period_no สูงสุด
       const {data:allP}=await sb.from('petty_cash_periods').select('period_no').order('period_no',{ascending:false}).limit(1);
       const newNo=((allP&&allP.length>0?allP[0].period_no:0)||0)+1;
@@ -1265,6 +1288,8 @@ async function loadPeriodForMonth(){
       showToast(`สร้างงวดเดือน ${monthLabel()} (ยอดยกมา: ${fmt(carryBal)} บาท)`,'success');
     } else {
       currentPeriod=periods[0];
+      // งวดมีอยู่แล้ว: เดิมข้ามการคำนวณยกมาทั้งหมด → เติมให้ถ้ายังว่างเปล่า
+      await backfillOpeningIfEmpty();
     }
     // 🚀 ยิงทุกชุดข้อมูลพร้อมกัน (parallel)
     await Promise.all([
@@ -1427,33 +1452,37 @@ function prevMonth(){
 // ══════════════════════════════════════════════
 // OPENING BALANCE
 // ══════════════════════════════════════════════
-async function onOpeningChange(){
+let _openSaveTimer=null;
+function onOpeningChange(){
   if(currentPeriod?.is_locked){ showToast('งวดนี้ถูกล็อกแล้ว','error'); return; }
-  if(transactions.length>0){ showToast('มีรายการแล้ว ไม่สามารถแก้ยอดเปิดได้','error'); return; }
+  if(transactions.length>0&&currentRole!=='manager'){ showToast('มีรายการแล้ว ไม่สามารถแก้ยอดเปิดได้','error'); return; }
+  clearTimeout(_openSaveTimer);           // กันยิง DB ทุกตัวอักษรที่พิมพ์
+  _openSaveTimer=setTimeout(saveOpening,700);
+}
+async function saveOpening(){
   const v=parseFloat(document.getElementById('openingInput').value)||0;
-  await sb.from('petty_cash_periods').update({open_bal:v}).eq('id',currentPeriod.id);
+  const old=parseFloat(currentPeriod.open_bal)||0;
+  if(Math.abs(v-old)<0.005) return;
+  const {error:ue}=await sb.from('petty_cash_periods').update({open_bal:v}).eq('id',currentPeriod.id);
+  if(ue){ showToast('บันทึกยอดเปิดรอบไม่สำเร็จ: '+ue.message,'error'); return; }   // เดิมไม่เช็ค error → ขึ้น "สำเร็จ" แล้วเด้งกลับตอนรีเฟรช
   currentPeriod.open_bal=v;
-  await addAudit('edit',`ตั้งยอดเปิดรอบ: ${fmt2(v)} บาท`);
+  await addAudit('edit',`ตั้งยอดเปิดรอบ: ${fmt2(old)} → ${fmt2(v)} บาท`+(transactions.length>0?' (แก้ทั้งที่มีรายการแล้ว — ผู้จัดการ)':''));
   renderCards(); renderDiff();
   showToast('บันทึกยอดเปิดรอบแล้ว','success');
 }
 
 async function autoOpening(){
+  if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว แก้ยอดยกมาไม่ได้','error'); return; }
   if(transactions.length>0){
     if(!confirm('มีรายการอยู่แล้ว\nการดึงยอดยกมาจะกระทบยอดคงเหลือทั้งหมด\nยืนยัน?')) return;
   }
   showLoading(true,'ดึงยอดจากเดือนก่อน...');
   try{
     const pm=prevMonth();
-    const {data:prevP}=await sb.from('petty_cash_periods').select('id,open_bal').eq('month_key',pm).limit(1);
-    if(!prevP||prevP.length===0){ showToast('ไม่พบข้อมูลเดือนก่อน','error'); showLoading(false); return; }
-    const {data:prevTx}=await sb.from('petty_cash_transactions').select('tx_type,amount,description,acc_code').eq('period_id',prevP[0].id);
-    // คำนวณยอดยกมาด้วยสูตรเดียวกับ closing() เป๊ะ: open_bal + totalInc − totalExp − cashReturn
-    const pIn=(prevTx||[]).filter(t=>t.tx_type==='income'&&!(t.description||'').includes('สำรอง')).reduce((s,t)=>s+parseFloat(t.amount),0);
-    const pOut=(prevTx||[]).filter(t=>t.tx_type==='expense'&&!((t.description||'').includes('หนี้')||t.acc_code==='1111-10')).reduce((s,t)=>s+parseFloat(t.amount),0);
-    const pReturn=(prevTx||[]).filter(t=>t.tx_type==='expense'&&t.acc_code==='1111-10'&&(t.description||'').includes('คืนเงินสดย่อย')).reduce((s,t)=>s+parseFloat(t.amount),0);
-    const carry=(parseFloat(prevP[0].open_bal)||0)+pIn-pOut-pReturn;
-    await sb.from('petty_cash_periods').update({open_bal:carry}).eq('id',currentPeriod.id);
+    const {found,carry}=await carryFromMonth(pm);
+    if(!found){ showToast('ไม่พบข้อมูลเดือนก่อน','error'); showLoading(false); return; }
+    const {error:ue}=await sb.from('petty_cash_periods').update({open_bal:carry}).eq('id',currentPeriod.id);
+    if(ue) throw new Error(ue.message);
     currentPeriod.open_bal=carry;
     document.getElementById('openingInput').value=carry;
     await addAudit('edit',`ดึงยอดยกมาอัตโนมัติจากเดือน ${pm} = ${fmt2(carry)} บาท`);
@@ -1479,7 +1508,8 @@ function render(){
   document.getElementById('actualInput').value=actualCash||'';
   // Opening lock
   const hasEntries=transactions.length>0;
-  const locked=currentPeriod.is_locked||hasEntries;
+  // เดิม: มีรายการแรกปุ๊บ ล็อกทุกคน → ถ้ายอดยกมาผิดจะแก้มือไม่ได้เลย  ตอนนี้ผู้จัดการยังแก้ได้ (มี audit กำกับ)
+  const locked=currentPeriod.is_locked||(hasEntries&&currentRole!=='manager');
   const openInp=document.getElementById('openingInput');
   openInp.readOnly=locked;
   openInp.style.background=locked?'#f0f0f0':'';
