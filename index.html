@@ -1443,6 +1443,18 @@ function monthLabel(){
   const[y,m]=month.split('-');
   return `${MONTHS_TH[+m-1]} ${+y+543}`;
 }
+// ── รหัสก้อนที่คนอ่านรู้เรื่อง: MM-NN เช่น 08-01 = ก้อนแรกของเดือน ส.ค. · ขึ้นเดือนใหม่รีเซ็ตเป็น 09-01
+//    (คำนวณจาก month_key + kon_number ที่มีอยู่แล้ว — ไม่แตะข้อมูลเก่า ย้อนหลังอ่านถูกทันที)
+function konCode(n, mk){
+  const v=parseInt(n,10);
+  if(!Number.isFinite(v)||v<=0) return (n===null||n===undefined||n==='')?'?':String(n);
+  const mm=String((mk||month||'')).split('-')[1]||'';
+  return mm?`${mm}-${String(v).padStart(2,'0')}`:String(v);
+}
+function monthLabelOf(mk){
+  const a=String(mk||'').split('-');
+  return (a.length>1&&a[1])?`${MONTHS_TH[+a[1]-1]} ${+a[0]+543}`:'';
+}
 function prevMonth(){
   let [y,m]=month.split('-').map(Number);
   m--; if(m<1){ m=12; y--; }
@@ -1519,7 +1531,7 @@ function render(){
   document.getElementById('countBal').textContent=fmt2(cl);
   // Period bar
   const pbar=document.getElementById('periodInfo');
-  pbar.textContent=`งวดที่ ${currentPeriod.period_no} · เดือน ${monthLabel()}`;
+  pbar.textContent=`เดือน ${monthLabel()}`+(currentOpenKon?` · ก้อน ${konCode(currentOpenKon.kon_number)}`:' · ยังไม่เปิดก้อน');
   const pstatus=document.getElementById('periodStatusBadge');
   pstatus.innerHTML=currentPeriod.is_locked
     ? '<span class="period-locked-badge">🔒 ปิดยอดแล้ว</span>'
@@ -1751,16 +1763,13 @@ if(!prevBox||!prevDetail) return;
 // Bug #3 — หนี้เก่ายกมาจากก้อนก่อนหน้า: SUM income 1111-30 ที่ description มีคำว่า 'สำรอง' ของ period ก่อนหน้า
 let prevDebtHtml='';
 try{
-  const curNo=parseInt(currentPeriod?.period_no)||0;
-  if(curNo>1){
-    const {data:pPrev}=await sb.from('petty_cash_periods').select('id,period_no').eq('period_no',curNo-1).limit(1);
-    if(pPrev&&pPrev.length>0){
-      const {data:pTx}=await sb.from('petty_cash_transactions').select('amount,description,acc_code,tx_type').eq('period_id',pPrev[0].id).eq('tx_type','income').eq('acc_code','1111-30');
-      const prevDebt=(pTx||[]).filter(t=>(t.description||'').includes('สำรอง')).reduce((a,t)=>a+parseFloat(t.amount||0),0);
-      if(prevDebt>0){
-        prevDebtHtml=`<div style=\"background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;color:var(--red)\"><div style=\"font-weight:600;font-size:13px;margin-bottom:.35rem\">📦 หนี้เก่ายกมาจากวงเงินก้อนที่ ${pPrev[0].period_no}</div><div style=\"display:flex;justify-content:space-between;font-size:13px\"><span>เบิกสำรองค้างจ่าย</span><span class=\"mono\" style=\"font-weight:700\">${fmt2(prevDebt)} บาท</span></div></div>`;
-      }
-    }
+  // เดิมใช้ period_no-1 หาเดือนก่อน — แต่ period_no เรียงตามลำดับ "การสร้างแถว" ไม่ใช่ตามเดือน
+  // (ก.ย.69 = งวดที่ 4 → curNo-1 = 3 = มิ.ย.69) เลยโชว์หนี้ของเดือนมั่ว ตอนนี้อิงเดือนก่อนหน้าจริง
+  const _pm=prevMonth();
+  const _pc=await carryFromMonth(_pm);
+  const _prevDebt=(_pc.found&&_pc.carry<-0.005)?Math.abs(_pc.carry):0;
+  if(_prevDebt>0){
+    prevDebtHtml=`<div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;color:var(--red)"><div style="font-weight:600;font-size:13px;margin-bottom:.35rem">📦 หนี้เก่ายกมาจากเดือน ${monthLabelOf(_pm)}</div><div style="display:flex;justify-content:space-between;font-size:13px"><span>เบิกสำรองค้างจ่าย</span><span class="mono" style="font-weight:700">${fmt2(_prevDebt)} บาท</span></div></div>`;
   }
 }catch(e){ console.error('prev-period debt error',e); }
 const inc1111=transactions.filter(t=>t.tx_type==='income'&&t.acc_code==='1111-30').sort((a,b)=>a.tx_date.localeCompare(b.tx_date)||(a.created_at||'').localeCompare(b.created_at||''));
@@ -1796,7 +1805,7 @@ let prevReserve = 0;
       }
     }
     const usable=inc30-prevReserve;
-ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;border:1px solid #dbeafe"><div style="font-weight:600;font-size:13px;margin-bottom:.5rem;color:#1e40af">\uD83D\uDD12 รอบเงินก้อนที่ ${i+1} (ปิดแล้ว)</div><div style="display:grid;grid-template-columns:1fr auto;gap:.3rem .75rem;font-size:12.5px"><div style="color:var(--muted)">เงินต้น</div><div style="font-family:'IBM Plex Mono',monospace;text-align:right">${fmt2(openBal)} บาท</div><div style="color:var(--muted)">รับเงิน (1111-30)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">+ ${fmt2(inc30)} บาท</div>${prevReserve>0?`<div style="color:var(--muted)">หักหนี้เก่า</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(prevReserve)} บาท</div><div style="color:var(--muted)">ใช้ได้จริง</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">${fmt2(usable)} บาท</div>`:`<div style="color:var(--muted)">ค่าใช้จ่ายรวม</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(exp)} บาท</div>`}${ret10>0?`<div style="color:var(--muted);padding-left:8px;font-size:11.5px">คืนเงินสดย่อย (1111-10)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:11.5px;text-align:right">${fmt2(ret10)} บาท</div>`:''}<div style="border-top:1px solid #bfdbfe;margin:.25rem 0;grid-column:1/-1"></div><div style="font-weight:700">เงินคงเหลือ</div><div style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:${Math.abs(balance)<0.005?'var(--green)':balance<0?'var(--red)':'var(--amber)'};text-align:right">${fmt2(balance)} บาท</div>${deficit>0?`<div style="font-size:11px;color:var(--muted);margin-top:.3rem">⚠️ เงินเกินบัญชี ${fmt2(deficit)} บาท — ถูกนำไปหักออกจากวงเงินใหม่แล้ว</div>`:''}</div></div>`;
+ph+=`<div style="background:#f8faff;border-radius:8px;padding:.75rem 1rem;margin:.5rem 0;border:1px solid #dbeafe"><div style="font-weight:600;font-size:13px;margin-bottom:.5rem;color:#1e40af">\uD83D\uDD12 รอบเงินก้อนที่ ${konCode(i+1)} (ปิดแล้ว)</div><div style="display:grid;grid-template-columns:1fr auto;gap:.3rem .75rem;font-size:12.5px"><div style="color:var(--muted)">เงินต้น</div><div style="font-family:'IBM Plex Mono',monospace;text-align:right">${fmt2(openBal)} บาท</div><div style="color:var(--muted)">รับเงิน (1111-30)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">+ ${fmt2(inc30)} บาท</div>${prevReserve>0?`<div style="color:var(--muted)">หักหนี้เก่า</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(prevReserve)} บาท</div><div style="color:var(--muted)">ใช้ได้จริง</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--green);text-align:right">${fmt2(usable)} บาท</div>`:`<div style="color:var(--muted)">ค่าใช้จ่ายรวม</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--red);text-align:right">- ${fmt2(exp)} บาท</div>`}${ret10>0?`<div style="color:var(--muted);padding-left:8px;font-size:11.5px">คืนเงินสดย่อย (1111-10)</div><div style="font-family:'IBM Plex Mono',monospace;color:var(--amber);font-size:11.5px;text-align:right">${fmt2(ret10)} บาท</div>`:''}<div style="border-top:1px solid #bfdbfe;margin:.25rem 0;grid-column:1/-1"></div><div style="font-weight:700">เงินคงเหลือ</div><div style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:${Math.abs(balance)<0.005?'var(--green)':balance<0?'var(--red)':'var(--amber)'};text-align:right">${fmt2(balance)} บาท</div>${deficit>0?`<div style="font-size:11px;color:var(--muted);margin-top:.3rem">⚠️ เงินเกินบัญชี ${fmt2(deficit)} บาท — ถูกนำไปหักออกจากวงเงินใหม่แล้ว</div>`:''}</div></div>`;
 }
 prevDetail.innerHTML=prevDebtHtml+ph;
 }
@@ -2595,7 +2604,7 @@ async function saveEntry(){
     render();
     try{ renderCloseKonArea(); }catch(_){}
     if(konWasStale){
-      showToast(`ℹ️ หน้านี้ค้างอยู่ก้อนเก่า — ระบบบันทึกเข้าวงเงินก้อน ${konForSave} (ก้อนที่เปิดอยู่จริง) ให้แล้ว`,'ok');
+      showToast(`ℹ️ หน้านี้ค้างอยู่ก้อนเก่า — ระบบบันทึกเข้าวงเงินก้อน ${konCode(konForSave)} (ก้อนที่เปิดอยู่จริง) ให้แล้ว`,'ok');
     } else {
       showToast('บันทึกแล้ว ☁️','success');
     }
@@ -2820,7 +2829,7 @@ async function submitKonForReview(){
   renderCloseKonArea();
   try{
     await sendTelegram(
-      `📋 ขอปิดก้อน ${currentOpenKon?.kon_number||'?'}\n`+
+      `📋 ขอปิดก้อน ${konCode(currentOpenKon?.kon_number||'?')}\n`+
       `💰 ยอดบัญชี: ${fmt2(konClosing(currentOpenKon?.kon_number,currentOpenKon?.open_bal))} บาท\n`+
       `📥 นับจริง: ${fmt2(actual)} บาท\n`+
       (reserve>0?`🏦 สำรอง: ${fmt2(reserve)} บาท\n`:'')+
@@ -2857,7 +2866,7 @@ async function openReviewModal(mode){
   const bookCl=konClosing(kon.kon_number,kon.open_bal);
   const diff=actual-bookCl;
   document.getElementById('reviewKonSummary').innerHTML=`
-    <div style="font-weight:700;margin-bottom:6px">ก้อน ${kon.kon_number} — ยื่นโดย ${kon.submitted_by||'—'}</div>
+    <div style="font-weight:700;margin-bottom:6px">ก้อน ${konCode(kon.kon_number)} — ยื่นโดย ${kon.submitted_by||'—'}</div>
     <div style="display:flex;justify-content:space-between"><span>ยอดตามบัญชี</span><span class="mono">${fmt2(bookCl)} บาท</span></div>
     <div style="display:flex;justify-content:space-between"><span>นับจริง</span><span class="mono">${fmt2(actual)} บาท</span></div>
     <div style="display:flex;justify-content:space-between;font-weight:700"><span>ผลต่าง</span><span class="mono" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">
@@ -2936,7 +2945,7 @@ async function confirmReview(){
     await loadCurrentKon(); render(); renderCloseKonArea();
     try{
       await sendTelegram(
-        `🔍 ก้อน ${kon.kon_number} ผ่านตรวจสอบแล้ว\n`+
+        `🔍 ก้อน ${konCode(kon.kon_number)} ผ่านตรวจสอบแล้ว\n`+
         `👤 ตรวจโดย: ${user.name||user.role}\n`+
         `⏰ ${bkkDate(new Date())}\n`+
         `👉 รอผู้จัดการอนุมัติในแอป`
@@ -2966,7 +2975,7 @@ async function doRejectKon(user,kon){
   await loadCurrentKon(); render(); renderCloseKonArea();
   try{
     await sendTelegram(
-      `↩ ก้อน ${kon.kon_number} ถูกส่งกลับแก้ไข\n`+
+      `↩ ก้อน ${konCode(kon.kon_number)} ถูกส่งกลับแก้ไข\n`+
       `👤 โดย: ${user.name||user.role}\n`+
       `📝 เหตุผล: ${reason}\n`+
       `⏰ ${bkkDate(new Date())}\n`+
@@ -3097,7 +3106,7 @@ async function doApproveKon(user,kon){
     showToast(`❌ ปิดก้อนล้มเหลว: ${e.message}`,'error');
     try{
       await sendTelegram(
-        `🔴 ปิดก้อน ${kon.kon_number} ล้มเหลว\n`+
+        `🔴 ปิดก้อน ${konCode(kon.kon_number)} ล้มเหลว\n`+
         `❌ สาเหตุ: ${e.message}\n`+
         `📌 สถานะ: ยกเลิกทั้งหมด ก้อนยังเปิดอยู่\n`+
         `⏰ ${bkkDate(new Date())} · โดย: ${closedBy}`
@@ -3118,13 +3127,13 @@ async function doApproveKon(user,kon){
   }
 
   await addAudit('edit',
-    `ปิดก้อน ${result.kon_number} | บัญชี: ${fmt2(result.closing_calc)} | นับ: ${fmt2(actual)} | reserve: ${fmt2(reserve)} | โดย: ${closedBy}`
+    `ปิดก้อน ${konCode(result.kon_number)} | บัญชี: ${fmt2(result.closing_calc)} | นับ: ${fmt2(actual)} | reserve: ${fmt2(reserve)} | โดย: ${closedBy}`
   );
 
   showLoading(false);
   try{
     await sendTelegram(
-      `🟢 ปิดก้อน ${result.kon_number} เรียบร้อย\n`+
+      `🟢 ปิดก้อน ${konCode(result.kon_number)} เรียบร้อย\n`+
       `💰 ยอดปิด: ${fmt2(result.close_bal)} บาท\n`+
       `📥 รับ: ${fmt2(result.total_inc)} | 📤 จ่าย: ${fmt2(result.total_exp)}\n`+
       (reserve>0?`🏦 สำรอง: ${fmt2(reserve)} บาท\n`:'')+
@@ -3279,7 +3288,7 @@ async function showOpenFirstKonDialog(){
   modal.style.display='flex';
   modal.innerHTML=`
     <div class="modal" style="max-width:360px;text-align:center">
-      <h3 style="margin-bottom:8px">➕ เปิดก้อน ${nextKon}</h3>
+      <h3 style="margin-bottom:8px">➕ เปิดก้อน ${konCode(nextKon)}</h3>
       ${ob<-0.005?`
       <div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:8px 12px;font-size:12.5px;color:#7a0000;margin-bottom:12px;line-height:1.6;text-align:left">
         ⚠️ มียอดติดหนี้จากเดือนก่อน <strong>${fmt2(Math.abs(ob))} บาท</strong><br>
@@ -3296,7 +3305,7 @@ async function showOpenFirstKonDialog(){
       </div>
       <div class="modal-btns">
         <button class="btn-cancel-sm" id="btnCancelFirstKon">ยกเลิก</button>
-        <button class="btn btn-dark" id="btnConfirmFirstKon">เบิกก้อน ${nextKon} เลย</button>
+        <button class="btn btn-dark" id="btnConfirmFirstKon">เบิกก้อน ${konCode(nextKon)} เลย</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -3308,16 +3317,16 @@ async function showOpenFirstKonDialog(){
     const amount=parseFloat(document.getElementById('firstKonAmount').value);
     if(isNaN(amount)||amount<=0){ showToast('กรอกยอดเบิกให้ถูกต้อง','error'); return; }
     modal.remove();
-    showLoading(true,`กำลังเปิดก้อน ${nextKon}...`);
+    showLoading(true,`กำลังเปิดก้อน ${konCode(nextKon)}...`);
     try{
       const openedBy=currentUser?.name||currentRole||'manager';
       await openNewKon(currentPeriod.id, nextKon, amount, openedBy, bkkDate(new Date()));
       await loadTransactions();
       render();
-      showToast(`เปิดก้อน ${nextKon} สำเร็จ ✅`,'success');
+      showToast(`เปิดก้อน ${konCode(nextKon)} สำเร็จ ✅`,'success');
       try{
         await sendTelegram(
-          `🔵 เปิดก้อน ${nextKon} แล้ว\n`+
+          `🔵 เปิดก้อน ${konCode(nextKon)} แล้ว\n`+
           `💰 วงเงิน: ${fmt2(amount)} บาท\n`+
           (ob<-0.005?`⚠️ ยอดยกมา: -${fmt2(Math.abs(ob))} บาท\n`:'')+
           `⏰ ${bkkDate(new Date())} · โดย: ${openedBy}`
@@ -3342,8 +3351,8 @@ function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
   modal.style.display='flex';
   modal.innerHTML=`
     <div class="modal" style="max-width:360px;text-align:center">
-      <h3 style="margin-bottom:12px">ก้อน ${closedResult.kon_number} ปิดแล้ว ✅</h3>
-      <p style="color:var(--muted);margin-bottom:20px">เบิกก้อน ${nextKon} เลยไหม?</p>
+      <h3 style="margin-bottom:12px">ก้อน ${konCode(closedResult.kon_number)} ปิดแล้ว ✅</h3>
+      <p style="color:var(--muted);margin-bottom:20px">เบิกก้อน ${konCode(nextKon)} เลยไหม?</p>
       <div class="field">
         <label>ยอดเบิก (บาท)</label>
         <input id="nextKonAmount" type="number" value="20000"
@@ -3351,7 +3360,7 @@ function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
       </div>
       <div class="modal-btns">
         <button class="btn-cancel-sm" id="btnSkipNextKon">ยังก่อน</button>
-        <button class="btn btn-dark" id="btnOpenNextKon">เบิกก้อน ${nextKon} เลย</button>
+        <button class="btn btn-dark" id="btnOpenNextKon">เบิกก้อน ${konCode(nextKon)} เลย</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -3361,16 +3370,16 @@ function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
     const amount=parseFloat(document.getElementById('nextKonAmount').value);
     if(isNaN(amount)||amount<=0){showToast('กรอกยอดเบิกให้ถูกต้อง','error');return;}
     modal.remove();
-    showLoading(true,`กำลังเปิดก้อน ${nextKon}...`);
+    showLoading(true,`กำลังเปิดก้อน ${konCode(nextKon)}...`);
     try{
       const r=await openNewKon(periodId,nextKon,amount,closedBy,closeTxDate);
       await loadTransactions();
       render();
       const debtMsg = r.debtFromPrev>0.005 ? ` (ส่งคืนหนี้ก้อนก่อน ${fmt2(r.debtFromPrev)} บาท)` : '';
-      showToast(`เปิดก้อน ${nextKon} สำเร็จ ✅${debtMsg}`,'success');
+      showToast(`เปิดก้อน ${konCode(nextKon)} สำเร็จ ✅${debtMsg}`,'success');
       try{
         await sendTelegram(
-          `🔵 เปิดก้อน ${nextKon} แล้ว\n`+
+          `🔵 เปิดก้อน ${konCode(nextKon)} แล้ว\n`+
           `💰 วงเงิน: ${fmt2(amount)} บาท\n`+
           (r.debtFromPrev>0.005?`↩️ ส่งคืนหนี้ก้อนก่อน: ${fmt2(r.debtFromPrev)} บาท\n`:'')+
           `⏰ ${bkkDate(new Date())} · โดย: ${closedBy}`
@@ -3384,7 +3393,7 @@ function showOpenNextKonDialog(closedResult,closedBy,closeTxDate){
 
   document.getElementById('btnSkipNextKon').onclick=()=>{
     modal.remove();
-    showToast(`ปิดก้อน ${closedResult.kon_number} เรียบร้อย — เบิกทีหลังได้`,'success');
+    showToast(`ปิดก้อน ${konCode(closedResult.kon_number)} เรียบร้อย — เบิกทีหลังได้`,'success');
   };
 }
 
@@ -4015,7 +4024,7 @@ function renderWithdrawList(){
     h+=`<div class="wr-card ${wr.status==='approved'?'approved':wr.status==='rejected'?'rejected':wr.status==='audited'?'':'pending'}">
       <div class="wr-head">
         <div>
-          <div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:.15rem">\uD83D\uDD12 วงเงินก้อนที่ ${_konNo}</div><div class="wr-amt">฿ ${fmt2(wr.requested_amount)}</div>
+          <div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:.15rem">\uD83D\uDD12 วงเงินก้อนที่ ${konCode(_konNo)}</div><div class="wr-amt">฿ ${fmt2(wr.requested_amount)}</div>
           <div class="wr-meta">
             โดย: ${wr.requested_by_name||wr.requested_by_role} · ${fmtDatetime(wr.created_at)}<br>
             ยอดบัญชี: ${fmt2(wr.bal_book)} บาท · นับจริง: ${fmt2(wr.counted_actual)} บาท<br>
@@ -4459,7 +4468,7 @@ function openLabourPay(){
 
   document.getElementById('labPayHead').innerHTML =
     `ลงเป็นรายจ่ายเงินสดย่อย รหัส <b>5211-20 ค่าจ้าง - ช่างทำวงกบ</b>`+
-    (currentOpenKon?` · ก้อนที่ ${currentOpenKon.kon_number}`:'')+
+    (currentOpenKon?` · ก้อนที่ ${konCode(currentOpenKon.kon_number)}`:'')+
     ` · วันที่ ${fmtDate(todayStr())}`;
 
   document.getElementById('labPayBody').innerHTML = sel.map(b=>{
