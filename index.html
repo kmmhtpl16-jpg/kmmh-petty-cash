@@ -3235,7 +3235,7 @@ async function openNewKon(periodId,konNumber,openBal,openedBy,openDate){
   // 2. เบิกเงินก้อนใหม่ (income 1111-30)
   const {error:txErr}=await sb.from('petty_cash_transactions').insert({
     period_id:periodId, tx_date:today, tx_type:'income', acc_code:'1111-30',
-    description:`เบิกเงินสดย่อยก้อน ${konNumber}`,
+    description:`เบิกเงินสดย่อยก้อน ${konCode(konNumber)}`,
     amount:openBal, by_role:'manager', by_name:openedBy,
     kon_number:konNumber, is_return:false
   });
@@ -3245,7 +3245,7 @@ async function openNewKon(periodId,konNumber,openBal,openedBy,openDate){
   if(debtFromPrev > 0.005){
     const {error:debtErr}=await sb.from('petty_cash_transactions').insert({
       period_id:periodId, tx_date:today, tx_type:'expense', acc_code:'1111-10',
-      description:`ส่งคืนหนี้ก้อนก่อน (ก้อน ${konNumber-1})`,
+      description:`ส่งคืนหนี้ก้อนก่อน (ก้อน ${konCode(konNumber-1)})`,
       amount:debtFromPrev, by_role:'manager', by_name:openedBy,
       kon_number:konNumber, is_return:false
     });
