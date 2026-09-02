@@ -1211,6 +1211,7 @@ function doLogout(){
   if(!confirm('ออกจากระบบ?')) return;
   currentRole=null; currentUser=null; currentPin=''; pinBuffer='';
   LAB={rows:[],other:{},loaded:false,loading:false};
+  INS={rows:[],loaded:false,loading:false}; insPendingId=null;
   updatePinDots();
   document.getElementById('pinError').textContent='';
   document.getElementById('loginScreen').style.display='flex';
@@ -1539,6 +1540,7 @@ function render(){
   const pact=document.getElementById('periodActions');
   pact.innerHTML='';  // ลบปุ่ม "ปิดยอดเดือนนี้" (ชื่อหลอก + เรียก closeKon ซ้ำกับแท็บปิดก้อน) — ปิดก้อนผ่านแท็บ "ปิดก้อน/ตรวจนับ" เท่านั้น
   if(!LAB.loaded && !LAB.loading && currentRole!=='auditor') loadLabour(false);
+  if(!INS.loaded && !INS.loading) loadInsProposals(false);
   renderAlerts(); renderCards(); renderDiff(); renderTable();
   if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
   if(document.getElementById('view-reconcile').style.display!=='none'){ renderReconcile(); renderCountHistory(); renderCloseKonArea(); }
@@ -1574,6 +1576,18 @@ function renderAlerts(){
     h+=`<div class="alert alert-info">🔒 <span>รายการก่อนวันที่ ${fmtDate(lockCutoff())} ถูกล็อกแล้ว</span></div>`;
   if(currentPeriod?.is_locked)
     h+=`<div class="alert alert-info">🔒 <span><strong>งวดนี้ปิดยอดแล้ว</strong> — ไม่สามารถเพิ่ม/แก้ไข/ลบรายการได้</span></div>`;
+  // 🐷 เบิกเงินประกันงานจาก HR ที่ยังไม่ได้ลงเป็นรายจ่ายจริง
+  if(INS.loaded && INS.rows.length){
+    const sum=INS.rows.reduce((s,r)=>s+Number(r.amount||0),0);
+    const canAct=currentRole!=='auditor'&&!currentPeriod?.is_locked;
+    h+=`<div class="alert alert-warn"><span>🐷 <strong>เบิกเงินประกันงานรอลงรายการ ${INS.rows.length} รายการ</strong> รวม <strong>${fmt2(sum)} บาท</strong>`+
+      INS.rows.map(r=>`<br>• ${r.emp_label} · <strong>${fmt2(r.amount)} บาท</strong>`+
+        (r.note?` <span style="color:#888">(${r.note})</span>`:'')+
+        (canAct?` <button class="btn btn-dark" style="padding:2px 10px;font-size:12px;margin-left:6px" onclick="insFill('${r.id}')">ลงรายการ</button>`+
+                ` <button class="btn" style="padding:2px 8px;font-size:12px" onclick="insSkip('${r.id}')">ข้าม</button>`:'')
+      ).join('')+
+      `</span></div>`;
+  }
   // 🪚 บิลค่าแรงช่างค้างจ่าย — ใช้แถบเดิม ไม่เพิ่มกระดิ่ง
   if(LAB.loaded && LAB.rows.length && currentRole!=='auditor'){
     const owe = LAB.rows.reduce((s,b)=>s+Number(b.left_amount||0),0);
@@ -2218,7 +2232,7 @@ function renderDailyCount(){
 // ══════════════════════════════════════════════
 function openForm(){
   if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว ไม่สามารถเพิ่มรายการได้','error'); return; }
-  editTxId=null; editTxWasLocked=false;
+  editTxId=null; editTxWasLocked=false; insPendingId=null;
   pendingFiles=[];
   pendingPreviews=[];
   existingImageUrls=[];
@@ -2239,7 +2253,7 @@ function openEditTx(id){
   if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว','error'); return; }
   const tx=transactions.find(t=>t.id===id);
   if(!tx) return;
-  editTxWasLocked=false;
+  editTxWasLocked=false; insPendingId=null;
   if(isTxLocked(tx)){
     if(currentRole!=='manager'){ alert('รายการนี้ถูกล็อกแล้ว ไม่สามารถแก้ไขได้'); return; }
     if(!confirm('⚠️ รายการนี้ถูกล็อกจากการนับเงินไปแล้ว\nการแก้ไขจะกระทบยอดที่นับ/ปิดก้อนไปก่อนหน้านี้\nระบบจะบันทึกการแก้ไขนี้ไว้ใน Audit\n\nยืนยันแก้ไขในฐานะผู้จัดการ?')) return;
@@ -2585,14 +2599,31 @@ async function saveEntry(){
       `รูปภาพ: ${allImageUrls.length} ไฟล์`+
       (editTxId&&editTxWasLocked?` | ⚠️ แก้รายการที่ถูกล็อก (ผู้จัดการ override)`:'');
 
+    let newTxId=null;
     if(editTxId){
       const {error}=await sb.from('petty_cash_transactions').update(payload).eq('id',editTxId);
       if(error) throw new Error(error.message);
     } else {
-      const {error}=await sb.from('petty_cash_transactions').insert(payload);
+      const {data:insRow,error}=await sb.from('petty_cash_transactions').insert(payload).select('id').single();
       if(error) throw new Error(error.message);
+      newTxId=insRow?.id||null;
     }
     await addAudit(editTxId?'edit':'add', auditDesc);
+
+    // 🐷 ถ้ารายการนี้มาจากเรื่องที่ HR ส่งมา → ปิดเรื่อง ผูกกับรายการที่เพิ่งลง
+    if(insPendingId && !editTxId){
+      const doneId=insPendingId; insPendingId=null;
+      try{
+        const {error:pErr}=await sb.from('insurance_cash_proposals')
+          .update({status:'done', tx_id:newTxId, done_at:new Date().toISOString(),
+                   done_by:currentUser?.name||currentRole})
+          .eq('id',doneId);
+        if(pErr) throw new Error(pErr.message);
+        INS.loaded=false; loadInsProposals(false);
+      }catch(e){
+        showToast('⚠️ ลงรายการจ่ายแล้ว แต่ปิดเรื่องเบิกประกันงานไม่สำเร็จ: '+e.message,'error');
+      }
+    }
 
     // คืน blob URL preview memory
     pendingPreviews.forEach(u=>URL.revokeObjectURL(u));
@@ -4260,6 +4291,61 @@ function fmtDatetime(ts){
 //    บิลเกิดตอน "ส่งเข้ารายการผลิต" ในโปรแกรมวงกบ · ที่นี่มีหน้าที่ "จ่าย" อย่างเดียว
 // ══════════════════════════════════════════════
 let LAB = {rows:[], other:{}, loaded:false, loading:false};
+
+// ══ 🐷 เบิกเงินประกันงานที่ HR ส่งมารอลงรายการจ่ายจริง ══
+let INS = {rows:[], loaded:false, loading:false};
+let insPendingId=null;   // id ของเรื่องที่กำลังลงรายการอยู่ (null = รายการปกติ)
+
+async function loadInsProposals(showUi){
+  if(INS.loading) return;
+  INS.loading=true;
+  try{
+    const {data,error}=await sb.from('insurance_cash_proposals')
+      .select('id,emp_label,amount,entry_type,note,created_at')
+      .eq('status','pending').order('created_at',{ascending:true});
+    if(error) throw new Error(error.message);
+    INS.rows=data||[]; INS.loaded=true;
+    renderAlerts();
+  }catch(e){
+    INS.loaded=false;
+    console.warn('loadInsProposals:',e.message);
+  }finally{ INS.loading=false; }
+}
+
+// กดจากแถบเตือน → เปิดฟอร์มรายจ่ายพร้อมกรอกให้ครบ เหลือแค่ตรวจแล้วกดบันทึก
+function insFill(id){
+  const r=(INS.rows||[]).find(x=>x.id===id);
+  if(!r){ showToast('ไม่พบรายการนี้แล้ว','error'); loadInsProposals(false); return; }
+  if(currentPeriod?.is_locked){ showToast('งวดนี้ปิดยอดแล้ว ไม่สามารถเพิ่มรายการได้','error'); return; }
+  openForm();                       // openForm ล้าง insPendingId เอง จึงต้องตั้งค่าหลังจากนี้
+  document.getElementById('formTitle').textContent=
+    (r.entry_type==='refund'?'คืนเงินประกันงาน':'เบิกเงินประกันงาน')+' — '+r.emp_label;
+  document.getElementById('fAmount').value=Number(r.amount);
+  document.getElementById('fAcct').value='5211-10 เงินเดือน';
+  document.getElementById('fNote').value=
+    (r.entry_type==='refund'?'คืนเงินประกันงาน — ':'เบิกเงินประกันงาน — ')+r.emp_label+
+    (r.note?(' ('+r.note+')'):'');
+  insPendingId=id;
+}
+
+// ไม่ต้องลงรายการนี้ (เช่น HR กดผิด / จ่ายทางอื่นไปแล้ว)
+async function insSkip(id){
+  const r=(INS.rows||[]).find(x=>x.id===id);
+  if(!r) return;
+  const reason=prompt('ข้ามรายการนี้เพราะอะไร? (จะบันทึกไว้ให้ตรวจย้อนหลังได้)\n\n'+r.emp_label+' · '+fmt2(r.amount)+' บาท');
+  if(reason===null) return;
+  try{
+    const {error}=await sb.from('insurance_cash_proposals')
+      .update({status:'skipped', skip_reason:reason||'(ไม่ระบุเหตุผล)',
+               done_at:new Date().toISOString(), done_by:currentUser?.name||currentRole})
+      .eq('id',id);
+    if(error) throw new Error(error.message);
+    await addAudit('edit','ข้ามการลงรายการเบิกประกันงาน | '+r.emp_label+' | '+fmt2(r.amount)+' บาท | เหตุผล: '+(reason||'(ไม่ระบุ)'));
+    INS.loaded=false; await loadInsProposals(false);
+    showToast('ข้ามรายการแล้ว','ok');
+  }catch(e){ showToast('ทำรายการไม่สำเร็จ: '+e.message,'error'); }
+}
+
 let LAB_SEL = {};          // bill_id -> true
 let LAB_BASKET = [];       // งานอื่นที่รอจ่ายรอบนี้ — อยู่ในเครื่องเท่านั้น ยังไม่เข้าระบบ
 let LAB_KIND = '';
