@@ -3294,6 +3294,35 @@ async function openNewKon(periodId,konNumber,openBal,openedBy,openDate){
 }
 
 
+// ── ก่อนเปิดก้อนแรกของเดือน (เคส 1 ต.ค.69) ──
+//    งวด ต.ค. ถูกสร้าง 13:37 แต่ก้อน 09-05 ปิด 15:16 → ยอดยกมาค้างที่ −4,211 (ขาด "คืนเงินสดย่อย" 9 บาท ที่ถูกต้องคือ −4,220)
+//    กติกา: (1) เดือนก่อนต้องปิดก้อนครบทุกก้อนก่อน จึงจะเปิดก้อนแรกของเดือนนี้ได้
+//           (2) ตอนเปิดก้อนแรก คำนวณยอดยกมาใหม่จากยอดปิดเดือนก่อนจริงเสมอ (ไม่เชื่อค่าที่บันทึกไว้ตอนสร้างงวด)
+async function prepareFirstKonOfMonth(){
+  const pm=prevMonth();
+  const {data:pP,error:pe}=await sb.from('petty_cash_periods').select('id').eq('month_key',pm).limit(1);
+  if(pe) throw new Error('อ่านงวดเดือนก่อนไม่ได้: '+pe.message);
+  if(!pP||pP.length===0) return {ok:true};   // ไม่มีเดือนก่อนในระบบ (เดือนแรก) → ไม่ต้องตรวจ
+  const {data:openK,error:ke}=await sb.from('petty_cash_kon').select('kon_number,status').eq('period_id',pP[0].id).neq('status','closed');
+  if(ke) throw new Error('ตรวจก้อนเดือนก่อนไม่ได้: '+ke.message);
+  if(openK&&openK.length>0){
+    const list=openK.map(k=>konCode(k.kon_number,pm)).join(', ');
+    return {ok:false,msg:`เดือน ${monthLabelOf(pm)} ยังปิดก้อนไม่ครบ (ก้อน ${list}) — ต้องปิดก้อนเก่าให้เสร็จก่อน จึงจะเปิดก้อนแรกของเดือนนี้ได้`};
+  }
+  const {found,carry}=await carryFromMonth(pm);
+  if(!found) return {ok:true};
+  const cur=parseFloat(currentPeriod.open_bal)||0;
+  const nv=Math.round(carry*100)/100;
+  if(Math.abs(nv-cur)>0.005){
+    const {error:ue}=await sb.from('petty_cash_periods').update({open_bal:nv}).eq('id',currentPeriod.id);
+    if(ue) throw new Error('อัปเดตยอดยกมาไม่ได้: '+ue.message);
+    currentPeriod.open_bal=nv;
+    await addAudit('edit',`ปรับยอดยกมาก่อนเปิดก้อนแรก ${fmt2(cur)} → ${fmt2(nv)} บาท (คำนวณใหม่จากยอดปิดเดือน ${pm} หลังปิดก้อนครบ)`);
+    showToast(`ปรับยอดยกมาเป็น ${fmt2(nv)} บาท ตามยอดปิดเดือนก่อน`,'success');
+  }
+  return {ok:true};
+}
+
 // ── เปิดก้อนแรกของเดือน (entry point เมื่อไม่มีก้อนเปิดอยู่) ──
 async function showOpenFirstKonDialog(){
   if(currentRole!=='manager'){ showToast('สิทธิ์ Manager เท่านั้น','error'); return; }
@@ -3306,6 +3335,13 @@ async function showOpenFirstKonDialog(){
     .order('kon_number',{ascending:false})
     .limit(1);
   const nextKon=((kons&&kons.length>0)?kons[0].kon_number:0)+1;
+
+  if(nextKon===1){
+    try{
+      const chk=await prepareFirstKonOfMonth();
+      if(!chk.ok){ showToast('⛔ '+chk.msg,'error'); return; }
+    }catch(e){ showToast('❌ '+e.message,'error'); return; }
+  }
 
   const ob=closing();
   const netAmt=(20000+ob).toFixed(2);
@@ -3350,6 +3386,11 @@ async function showOpenFirstKonDialog(){
     modal.remove();
     showLoading(true,`กำลังเปิดก้อน ${konCode(nextKon)}...`);
     try{
+      // ตรวจซ้ำตอนกดยืนยัน — กันเคสเปิดหน้าต่างค้างไว้ แล้วระหว่างนั้นเดือนก่อนมีการเปลี่ยนแปลง
+      if(nextKon===1){
+        const chk=await prepareFirstKonOfMonth();
+        if(!chk.ok) throw new Error(chk.msg);
+      }
       const openedBy=currentUser?.name||currentRole||'manager';
       await openNewKon(currentPeriod.id, nextKon, amount, openedBy, bkkDate(new Date()));
       await loadTransactions();
