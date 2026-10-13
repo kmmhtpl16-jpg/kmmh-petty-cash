@@ -999,12 +999,16 @@ function receiptStoragePath(u){
   if(m) return decodeURIComponent(m[1]);
   return u.includes('://')?null:u;
 }
+/* รูปงานจากโปรแกรมวงกบ เก็บเป็น "fr-photos/<path>" — ใช้ไฟล์เดิมใน bucket fr-photos ไม่ก๊อปซ้ำ */
+function isFrPhoto(u){ return typeof u==='string' && u.startsWith('fr-photos/'); }
 async function receiptSignedUrl(u, transform){
   const path=receiptStoragePath(u);
   if(!path) return null;
   try{
     const opts=transform?{transform}:undefined;
-    const {data,error}=await sb.storage.from('receipts').createSignedUrl(path, 3600, opts);
+    const fr=isFrPhoto(path);
+    const {data,error}=await sb.storage.from(fr?'fr-photos':'receipts')
+      .createSignedUrl(fr?path.slice('fr-photos/'.length):path, 3600, opts);
     if(error){ console.warn('signedUrl', error.message); return null; }
     return data?.signedUrl||null;
   }catch(e){ console.warn('signedUrl', e.message); return null; }
@@ -2662,7 +2666,7 @@ async function deleteTx(id){
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
     if(imgUrls.length>0){
       // แปลง public URL → storage path (หลัง /receipts/)
-      const paths=imgUrls.map(url=>{
+      const paths=imgUrls.filter(u=>!isFrPhoto(u)).map(url=>{
         const m=url.match(/\/receipts\/(.+)$/);
         return m?m[1]:null;
       }).filter(Boolean);
@@ -4421,6 +4425,21 @@ async function loadLabour(showUi){
 
 function labLeftSets(b){ return Number(b.sets_ordered||0) - Number(b.paid_sets||0); }
 
+/* รูปงานที่ตกลงกับลูกค้า (จากโปรแกรมวงกบ) — กดดูรูปเต็มได้ · ตอนจ่าย รูปชุดนี้ติดไปกับรายการ 5211-20 ด้วย */
+function labPhotoStrip(b){
+  const ph=(b.photos||[]).filter(Boolean);
+  if(!ph.length) return '<div class="audit-time" style="margin-top:4px">📷 ไม่มีรูปงานในโปรแกรมวงกบ</div>';
+  return '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">'+
+    ph.slice(0,4).map((u,i)=>`<img data-rthumb="${encodeURIComponent(u)}" data-rsize="56" alt="รูปงาน"
+      title="รูปงานจากโปรแกรมวงกบ (${ph.length} รูป) — กดดูรูปเต็ม" onclick="labPhotoOpen(${b.bill_id},${i})"
+      style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--line,#ddd);background:#f1f5f9;cursor:pointer">`).join('')+
+    (ph.length>4?`<span class="audit-time" style="align-self:center">+${ph.length-4}</span>`:'')+'</div>';
+}
+async function labPhotoOpen(billId,i){
+  const b=(LAB.rows||[]).find(x=>String(x.bill_id)===String(billId));
+  if(b&&b.photos&&b.photos.length) await lbOpen(b.photos,i);
+}
+
 function renderLabour(){
   const rows = LAB.rows||[];
   const owe  = rows.reduce((s,b)=>s+Number(b.left_amount||0),0);
@@ -4458,7 +4477,7 @@ function renderLabour(){
           <td><b>${b.job_no||''}</b>
               <div class="audit-time">${b.bill_no||''} · ${fmtDate(b.bill_date)}${
                 days>7 ? ' · <span style="color:var(--red)">ค้าง '+days+' วัน</span>' : ''}</div></td>
-          <td class="desc">${b.customer_name||'—'}</td>
+          <td class="desc">${b.customer_name||'—'}${labPhotoStrip(b)}</td>
           <td class="mono" style="text-align:center">${fmt(b.sets_ordered)}</td>
           <td class="mono num-norm" style="text-align:right">${fmt2(b.amount_expected)}</td>
           <td class="mono ${part?'num-green':''}" style="text-align:right">${part?fmt2(paid):'—'}</td>
@@ -4468,6 +4487,7 @@ function renderLabour(){
               : '<span class="badge badge-exp">ยังไม่จ่าย</span>'}</td>
         </tr>`;
       }).join('') + '</tbody></table>';
+  hydrateReceiptThumbs();
   renderLabBasket();
   renderLabSummary();
   renderLabHist();
@@ -4713,6 +4733,7 @@ async function doLabourPay(){
     labSay('labMsg', `✅ จ่ายค่าแรงช่างแล้ว <b>${fmt2(data.total)} บาท</b>`+
                      (data.bill_nos?` · บิล ${data.bill_nos}`:'')+
                      (data.others?` · งานอื่น ${data.others} รายการ (${fmt2(data.others_total)} บาท)`:'')+
+                     (data.photos?` · แนบรูปงาน ${data.photos} รูป`:'')+
                      ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 <b>แถวเดียว</b> เรียบร้อย`, 'ok');
     switchTab('labour'); window.scrollTo({top:0, behavior:'smooth'});
   }catch(e){
