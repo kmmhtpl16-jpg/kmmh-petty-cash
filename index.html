@@ -4921,6 +4921,7 @@ scheduleDailyTelegram();
       const resp = await fetch(PC_LOGIN_URL, { method:'POST', headers:{ 'apikey':SUPABASE_KEY, 'Content-Type':'application/json' }, body: JSON.stringify({ pin: pin }) });
       const j = await resp.json().catch(()=>({}));
       const data = (resp.ok && j.user) ? j.user : null;
+      if(resp.status === 429){ showLoginError('🔒 ' + (j.message || 'ใส่รหัสผิดหลายครั้ง กรุณารอ 15 นาที')); setLoginLoading(''); return; }   // SEC-1A-L F1: ข้อความล็อกจากเซิร์ฟเวอร์
       if(!data){
         _loginAttempts++;
         if(_loginAttempts >= 5){ _loginLockedUntil = Date.now() + 30000; _loginAttempts = 0; showLoginError('🔒 ป้อน PIN ผิดหลายครั้ง — รอ 30 วินาที'); }
