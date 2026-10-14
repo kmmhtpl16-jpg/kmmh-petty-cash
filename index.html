@@ -992,6 +992,13 @@ tbody tr:hover td{background:#fafaf7}
 const SUPABASE_URL = 'https://hfystbdqjhftrlelmkjm.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmeXN0YmRxamhmdHJsZWxta2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNTc3MDUsImV4cCI6MjA5NDczMzcwNX0.cyRCwh0G6ArSevhsKa6kmPnYhLRRJYrxhlH0ED_JJaE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// ── SEC-1A-P: ยืนยัน PIN ผู้จัดการ/ผู้ตรวจที่เซิร์ฟเวอร์ (ไม่อ่าน pin_value จากหน้าเว็บอีก) ──
+// คืนรูปแบบเดิม {data:{id,name,role}|null, error} เพื่อให้โค้ดเดิมใช้ต่อได้
+async function pcCheckPin(pin, roles){
+  const {data,error}=await sb.rpc('pc_check_pin',{p_pin:String(pin||''),p_roles:roles});
+  if(error) return {data:null,error};
+  return {data:(data&&data.id)?data:null,error:null};
+}
 // ── รูปใบเสร็จผ่าน signed URL (bucket receipts = private) ──
 function receiptStoragePath(u){
   if(!u) return null; u=String(u);
@@ -1123,12 +1130,7 @@ async function submitPin(){
   setLoginLoading('⏳ กำลังตรวจสอบ...');
   try{
     // Query Supabase — ไม่มี PIN ใดๆ อยู่ในโค้ด
-    const {data,error}=await sb
-      .from('petty_cash_users')
-      .select('id,name,role,is_active')
-      .eq('pin_value',pin)
-      .eq('is_active',true)
-      .maybeSingle();   // maybeSingle: ไม่ throw ถ้าไม่เจอ
+    const {data,error}=await pcCheckPin(pin,['cashier','auditor','manager']);   // โค้ดเก่า (ถูกแทนด้วย window.submitPin ด้านล่าง)
     if(!data){
       _loginAttempts++;
       // ล็อก 30 วิ หลังพิมพ์ผิด 5 ครั้ง
@@ -1846,8 +1848,7 @@ async function checkDeleteCountPin(){
   const btn=document.getElementById('btnDeleteCountConfirm');
   btn.disabled=true; btn.style.opacity='.4';
   if(val.length<4) return;
-  const {data,error}=await sb.from('petty_cash_users')
-    .select('id,name,role').eq('pin_value',val).in('role',['auditor','manager']).eq('is_active',true).maybeSingle();
+  const {data,error}=await pcCheckPin(val,['auditor','manager']);
   if(error||!data){
     status.textContent='❌ PIN ไม่ถูกต้อง (ต้องเป็นผู้ตรวจสอบหรือผู้จัดการ)';
     status.style.color='var(--red)';
@@ -1949,7 +1950,7 @@ const btn=document.getElementById('btnConfirmCountPin');
 btn.disabled=true; btn.style.opacity='.4'; btn._confirmedName=''; btn._confirmedRole='';
 if(val.length<4){ status.textContent=''; return; }
 try{
-const {data}=await sb.from('petty_cash_users').select('id,name,role').eq('pin_value',val).in('role',['manager','auditor']).eq('is_active',true).maybeSingle();
+const {data}=await pcCheckPin(val,['manager','auditor']);
 if(data){
 status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
 status.style.color='var(--green)';
@@ -2032,8 +2033,7 @@ async function checkCountAuditPin(){
   const btn=document.getElementById('btnCountAuditConfirm');
   btn.disabled=true; btn.style.opacity='.4'; btn._auditorName=''; btn._auditorId='';
   if(val.length<4) return;
-  const {data,error}=await sb.from('petty_cash_users')
-    .select('id,name,role').eq('pin_value',val).eq('role','auditor').eq('is_active',true).maybeSingle();
+  const {data,error}=await pcCheckPin(val,['auditor']);
   if(error||!data){
     status.textContent='❌ PIN ไม่ถูกต้อง';
     status.style.color='var(--red)';
@@ -2171,7 +2171,7 @@ async function checkDailyPin(){
   btn.disabled=true; btn.style.opacity='.4'; btn.style.cursor='not-allowed'; btn._auditorName=''; btn._auditorRole='';
   if(val.length<4){ status.textContent=''; return; }
   try{
-    const {data}=await sb.from('petty_cash_users').select('id,name,role').eq('pin_value',val).in('role',['manager','auditor']).eq('is_active',true).maybeSingle();
+    const {data}=await pcCheckPin(val,['manager','auditor']);
     if(data){
       status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
       status.style.color='var(--green)';
@@ -2927,8 +2927,7 @@ async function checkReviewPin(){
   // manager สามารถข้ามขั้น review ได้
   const roles=_reviewMode==='review'?['auditor','manager']:['manager'];
   try{
-    const {data}=await sb.from('petty_cash_users')
-      .select('id,name,role').eq('pin_value',val).in('role',roles).eq('is_active',true).maybeSingle();
+    const {data}=await pcCheckPin(val,roles);
     if(data){
       btnConfirm.disabled=false; btnConfirm.style.opacity='1';
       btnReject.disabled=false; btnReject.style.opacity='1';
@@ -3049,8 +3048,7 @@ async function checkCancelKonPin(){
   const status=document.getElementById('cancelKonPinStatus');
   if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn._confirmedUser=null; status.textContent=''; return; }
   try{
-    const {data}=await sb.from('petty_cash_users')
-      .select('id,name,role').eq('pin_value',val).eq('role','manager').eq('is_active',true).maybeSingle();
+    const {data}=await pcCheckPin(val,['manager']);
     if(data){
       btn.disabled=false; btn.style.opacity='1'; btn._confirmedUser=data;
       status.textContent='✅ '+(data.name||'ผู้จัดการ'); status.style.color='var(--green)';
@@ -3192,8 +3190,7 @@ async function checkCmMgrPin(){
   const status=document.getElementById('cmMgrPinStatus');
   if(!val||val.length<4){ if(btn){btn.disabled=true;btn.style.opacity='.4';} if(status)status.textContent=''; return; }
   try{
-    const {data}=await sb.from('petty_cash_users')
-      .select('id,name,role').eq('pin_value',val).eq('role','manager').eq('is_active',true).maybeSingle();
+    const {data}=await pcCheckPin(val,['manager']);
     if(data&&btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent=`✅ ปิดก้อนนี้ (${data.name||'Manager'})`; if(status){status.textContent=`✅ ${data.name}`; status.style.color='var(--green)';} btn._confirmedMgrId=data.id; btn._confirmedMgrName=data.name||'Manager'; }
     else { if(btn){btn.disabled=true;btn.style.opacity='.4';} if(status){status.textContent='❌ รหัสไม่ถูกต้อง';status.style.color='var(--red)';} if(document.getElementById('cmMgrPin'))document.getElementById('cmMgrPin').value=''; }
   }catch(e){ if(status){status.textContent='❌ '+e.message;status.style.color='var(--red)';} }
@@ -3877,9 +3874,9 @@ CREATE TABLE IF NOT EXISTS petty_cash_withdrawals (
 -- ⚠️  ห้ามเก็บ PIN ไว้ในโค้ด HTML — ต้องแก้ใน Supabase เท่านั้น
 INSERT INTO petty_cash_users (name, pin_value, role)
 VALUES 
-  ('พนักงานแคชเชียร์', '1234', 'cashier'),
-  ('ผู้ตรวจสอบ', '5678', 'auditor'),
-  ('ผู้จัดการ', '9999', 'manager')
+  ('พนักงานแคชเชียร์', '<ตั้งเองใน Table Editor>', 'cashier'),
+  ('ผู้ตรวจสอบ', '<ตั้งเองใน Table Editor>', 'auditor'),
+  ('ผู้จัดการ', '<ตั้งเองใน Table Editor>', 'manager')
 ON CONFLICT (pin_value) DO NOTHING;
 
 -- ⑦ สร้าง Storage Bucket 'receipts' สำหรับรูปใบเสร็จ
@@ -4157,8 +4154,7 @@ async function checkWrAuditPin(){
     status.textContent=''; return;
   }
   try{
-    const {data}=await sb.from('petty_cash_users')
-      .select('id,name,role').eq('pin_value',val).eq('role','auditor').eq('is_active',true).maybeSingle();
+    const {data}=await pcCheckPin(val,['auditor']);
     if(data){
       btnA.disabled=false; btnA.style.opacity='1';
       btnR.disabled=false; btnR.style.opacity='1';
@@ -4230,8 +4226,7 @@ async function checkWrMgrPin(){
     status.textContent=''; return;
   }
   try{
-    const {data}=await sb.from('petty_cash_users')
-      .select('id,name,role').eq('pin_value',val).eq('role','manager').eq('is_active',true).maybeSingle();
+    const {data}=await pcCheckPin(val,['manager']);
     if(data){
       btnA.disabled=false; btnA.style.opacity='1';
       btnR.disabled=false; btnR.style.opacity='1';
