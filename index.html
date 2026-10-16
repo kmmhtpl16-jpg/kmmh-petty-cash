@@ -248,6 +248,7 @@ tbody tr:hover td{background:#fafaf7}
 .lb-next{right:14px}
 .lb-count{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;font-size:13px;padding:5px 14px;border-radius:999px}
 .lb-err{background:#fff;color:#222;border-radius:10px;padding:18px 22px;text-align:center;max-width:80vw;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.lb-loading{color:#fff;font-size:15px;background:rgba(0,0,0,.5);padding:10px 18px;border-radius:999px}
 .lb-err-title{font-weight:700;font-size:15px;margin-bottom:4px}
 .lb-err-sub{font-size:12px;color:#666;margin-bottom:10px}
 .lb-close{position:absolute;top:14px;right:16px;background:rgba(255,255,255,.92);border:none;width:38px;height:38px;border-radius:50%;font-size:19px;cursor:pointer;color:#222;display:flex;align-items:center;justify-content:center}
@@ -981,6 +982,7 @@ tbody tr:hover td{background:#fafaf7}
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <button class="lb-nav lb-prev" id="lbPrev" onclick="event.stopPropagation();lbStep(-1)" title="รูปก่อนหน้า">&#8249;</button>
   <img id="lightboxImg" src="" alt="receipt" onclick="event.stopPropagation()" onerror="lbImgError()">
+  <div class="lb-loading" id="lbLoading" onclick="event.stopPropagation()" style="display:none">กำลังโหลดรูป...</div>
   <div class="lb-err" id="lbErr" onclick="event.stopPropagation()" style="display:none">
     <div class="lb-err-title">เปิดรูปนี้ไม่ได้</div>
     <div class="lb-err-sub">ไฟล์อาจถูกลบ หรือไม่มีสิทธิ์เปิด · รูปอื่นยังเลื่อนดูได้</div>
@@ -1029,17 +1031,23 @@ function receiptStoragePath(u){
 function hasReceiptFile(u){ return !!receiptStoragePath(u); }
 /* รูปงานจากโปรแกรมวงกบ เก็บเป็น "fr-photos/<path>" — ใช้ไฟล์เดิมใน bucket fr-photos ไม่ก๊อปซ้ำ */
 function isFrPhoto(u){ return typeof u==='string' && u.startsWith('fr-photos/'); }
+/* ขอ signed URL — ไม่ throw ทุกกรณี: คืน URL หรือ null (ไม่มีไฟล์/ไม่มีสิทธิ์/เน็ตล่ม/ค้างเกิน 15 วิ) */
+const RECEIPT_SIGN_TIMEOUT_MS=15000;
 async function receiptSignedUrl(u, transform){
-  const path=receiptStoragePath(u);
-  if(!path) return null;
+  let timer=null;
   try{
+    const path=receiptStoragePath(u);
+    if(!path) return null;
     const opts=transform?{transform}:undefined;
     const fr=isFrPhoto(path);
-    const {data,error}=await sb.storage.from(fr?'fr-photos':'receipts')
+    const req=sb.storage.from(fr?'fr-photos':'receipts')
       .createSignedUrl(fr?path.slice('fr-photos/'.length):path, 3600, opts);
-    if(error){ console.warn('signedUrl', error.message); return null; }
-    return data?.signedUrl||null;
-  }catch(e){ console.warn('signedUrl', e.message); return null; }
+    const timeout=new Promise(res=>{ timer=setTimeout(()=>res({data:null,error:{message:'timeout'}}), RECEIPT_SIGN_TIMEOUT_MS); });
+    const r=await Promise.race([req, timeout]);
+    if(!r || r.error){ console.warn('signedUrl', (r&&r.error&&r.error.message)||'no response'); return null; }
+    return (r.data&&r.data.signedUrl)||null;
+  }catch(e){ console.warn('signedUrl', (e&&e.message)||String(e)); return null; }
+  finally{ if(timer) clearTimeout(timer); }
 }
 async function hydrateReceiptThumbs(){
   const imgs=document.querySelectorAll('img[data-rthumb]');
@@ -2727,17 +2735,24 @@ async function lbOpen(rawUrls, startAt){
   startAt=src.slice(0, Math.max(Number(startAt)||0, 0)).filter(hasReceiptFile).length;
   const seq=++lbSeq;   // กันผลของการเปิดรอบเก่ามาทับรอบใหม่
   lbRetryReset();
-  const urls=await Promise.all(list.map(u => receiptSignedUrl(u)));
-  if(seq!==lbSeq) return;
-  lbRaw=list; lbUrls=urls;
+  // เปิดหน้าต่างทันที ("กำลังโหลดรูป...") แล้วขอลิงก์ทุกใบพร้อมกัน — ใบไหนได้ก่อนแสดงก่อน
+  // lbUrls[i]: undefined = กำลังโหลด · null = เปิดไม่ได้ · string = signed URL
+  lbRaw=list; lbUrls=list.map(()=>undefined);
   lbIdx  = Math.min(Math.max(Number(startAt)||0, 0), lbUrls.length-1);
   lbShow();
   document.getElementById('lightbox').classList.add('open');
+  await Promise.all(list.map((u,i)=>receiptSignedUrl(u).catch(()=>null).then(url=>{
+    if(seq!==lbSeq) return;          // ปิด/เปิดชุดใหม่ไปแล้ว
+    lbUrls[i]=url||null;
+    if(i===lbIdx) lbShow();
+  })));
 }
-function lbSetError(on){
-  const img=document.getElementById('lightboxImg'), err=document.getElementById('lbErr');
-  if(img) img.style.display = on?'none':'';
-  if(err) err.style.display = on?'':'none';
+function lbSetError(on){ lbSetState(on?'err':'img'); }
+function lbSetState(st){   // 'img' | 'err' | 'loading'
+  const img=document.getElementById('lightboxImg'), err=document.getElementById('lbErr'), ld=document.getElementById('lbLoading');
+  if(img) img.style.display = st==='img'?'':'none';
+  if(err) err.style.display = st==='err'?'':'none';
+  if(ld)  ld.style.display  = st==='loading'?'':'none';
 }
 function lbImgError(){
   // ขอลิงก์ได้แต่โหลดรูปไม่ขึ้น (เช่น ไฟล์ถูกลบหลังขอลิงก์) — นับเป็นเปิดไม่ได้เหมือนกัน
@@ -2757,7 +2772,8 @@ function lbRetryReset(){ lbRetryTok++; lbRetryBusy(false); }   // เรีย�
 async function lbRetry(){
   const i=lbIdx, seq=lbSeq, raw=lbRaw[i], tok=++lbRetryTok;
   lbRetryBusy(true);
-  const url=await receiptSignedUrl(raw);
+  let url=null;
+  try{ url=await receiptSignedUrl(raw); }catch(e){ url=null; }   // กันปุ่มค้างแม้มี exception หลุดมา
   if(tok!==lbRetryTok || seq!==lbSeq || lbRaw[i]!==raw) return;   // ผลของรอบเก่า ไม่แตะปุ่ม/รูป
   lbRetryBusy(false);
   lbUrls[i]=url||null;
@@ -2767,8 +2783,8 @@ function lbShow(){
   const img=document.getElementById('lightboxImg');
   if(!img||!lbUrls.length) return;
   const url=lbUrls[lbIdx];
-  if(url){ lbSetError(false); img.src=url; }
-  else { img.removeAttribute('src'); lbSetError(true); }
+  if(url){ lbSetState('img'); if(img.getAttribute('src')!==url) img.src=url; }
+  else { img.removeAttribute('src'); lbSetState(url===undefined?'loading':'err'); }
   const many = lbUrls.length>1;
   const c=document.getElementById('lbCount');
   if(c){ c.textContent = many ? ('รูปที่ '+(lbIdx+1)+' จาก '+lbUrls.length) : ''; c.style.display = many?'':'none'; }
