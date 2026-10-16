@@ -2726,6 +2726,7 @@ async function lbOpen(rawUrls, startAt){
   // startAt นับจากรายการเดิม → แปลงเป็นลำดับในรายการที่กรองแล้ว (ไม่ให้เปิดผิดใบ)
   startAt=src.slice(0, Math.max(Number(startAt)||0, 0)).filter(hasReceiptFile).length;
   const seq=++lbSeq;   // กันผลของการเปิดรอบเก่ามาทับรอบใหม่
+  lbRetryReset();
   const urls=await Promise.all(list.map(u => receiptSignedUrl(u)));
   if(seq!==lbSeq) return;
   lbRaw=list; lbUrls=urls;
@@ -2747,13 +2748,18 @@ function lbImgError(){
   lbUrls[lbIdx]=null;
   lbSetError(true);
 }
-async function lbRetry(){
-  const i=lbIdx, seq=lbSeq, raw=lbRaw[i];
+let lbRetryTok=0;
+function lbRetryBusy(on){
   const b=document.getElementById('lbRetry');
-  if(b){ b.disabled=true; b.textContent='กำลังลอง...'; }
+  if(b){ b.disabled=!!on; b.textContent=on?'กำลังลอง...':'ลองใหม่'; }
+}
+function lbRetryReset(){ lbRetryTok++; lbRetryBusy(false); }   // เรียกตอนเปิด/ปิด/เลื่อนรูป — ยกเลิกการลองใหม่ที่ค้าง
+async function lbRetry(){
+  const i=lbIdx, seq=lbSeq, raw=lbRaw[i], tok=++lbRetryTok;
+  lbRetryBusy(true);
   const url=await receiptSignedUrl(raw);
-  if(b){ b.disabled=false; b.textContent='ลองใหม่'; }
-  if(seq!==lbSeq || lbRaw[i]!==raw) return;
+  if(tok!==lbRetryTok || seq!==lbSeq || lbRaw[i]!==raw) return;   // ผลของรอบเก่า ไม่แตะปุ่ม/รูป
+  lbRetryBusy(false);
   lbUrls[i]=url||null;
   if(i===lbIdx) lbShow();
 }
@@ -2770,6 +2776,7 @@ function lbShow(){
 }
 function lbStep(d){
   if(lbUrls.length<2) return;
+  lbRetryReset();
   lbIdx = (lbIdx + d + lbUrls.length) % lbUrls.length;
   lbShow();
 }
@@ -2783,7 +2790,7 @@ async function showLightboxTx(id){
 }
 /* เปิดจากรูปในหน้าแก้ไขรายการ — เริ่มที่ใบที่กด */
 async function showLightboxEdit(i){ await lbOpen(existingImageUrls, i); }
-function closeLightbox(){ lbSeq++; document.getElementById('lightbox').classList.remove('open'); }
+function closeLightbox(){ lbSeq++; lbRetryReset(); document.getElementById('lightbox').classList.remove('open'); }
 /* ปุ่มลูกศรซ้าย-ขวา + Esc */
 document.addEventListener('keydown', e=>{
   const box=document.getElementById('lightbox');
