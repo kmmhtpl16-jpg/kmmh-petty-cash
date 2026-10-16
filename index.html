@@ -1000,11 +1000,17 @@ async function pcCheckPin(pin, roles){
   return {data:(data&&data.id)?data:null,error:null};
 }
 // ── รูปใบเสร็จผ่าน signed URL (bucket receipts = private) ──
+/* ค่ารูปใช้ได้จริงไหม — กัน null / "" / "null" / "undefined" (เคยยิง /sign/receipts/null → 400) */
+function isReceiptRef(u){
+  if(u==null) return false;
+  const s=String(u).trim();
+  return s!=='' && s!=='null' && s!=='undefined';
+}
 function receiptStoragePath(u){
-  if(!u) return null; u=String(u);
+  if(!isReceiptRef(u)) return null; u=String(u).trim();
   const m=u.match(/\/receipts\/([^?]+)/);
-  if(m) return decodeURIComponent(m[1]);
-  return u.includes('://')?null:u;
+  const p=m?decodeURIComponent(m[1]):(u.includes('://')?null:u);
+  return isReceiptRef(p)?p:null;
 }
 /* รูปงานจากโปรแกรมวงกบ เก็บเป็น "fr-photos/<path>" — ใช้ไฟล์เดิมใน bucket fr-photos ไม่ก๊อปซ้ำ */
 function isFrPhoto(u){ return typeof u==='string' && u.startsWith('fr-photos/'); }
@@ -1023,8 +1029,14 @@ async function receiptSignedUrl(u, transform){
 async function hydrateReceiptThumbs(){
   const imgs=document.querySelectorAll('img[data-rthumb]');
   for(const el of imgs){
-    const raw=decodeURIComponent(el.getAttribute('data-rthumb'));
+    // ฟังก์ชันนี้ถูกเรียกซ้อนกันได้ (render() + renderLabour()) — ถ้ารอบอื่นหยิบรูปนี้ไปแล้ว
+    // getAttribute จะได้ null → decodeURIComponent(null) = "null" → ห้ามยิงต่อ
+    const attr=el.getAttribute('data-rthumb');
+    if(attr==null) continue;
     el.removeAttribute('data-rthumb');
+    let raw=null;
+    try{ raw=decodeURIComponent(attr); }catch{ raw=null; }
+    if(!receiptStoragePath(raw)){ el.style.display='none'; continue; }
     const n=Number(el.getAttribute('data-rsize'))||72;
     const url=await receiptSignedUrl(raw, {width:n,height:n,resize:'cover',quality:60});
     if(url) el.src=url;
@@ -1643,6 +1655,7 @@ function renderTable(){
     // อ่าน Storage URL (ไม่ใช่ base64) จากฟิลด์ image_urls
     let imgUrls=[];
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
+    imgUrls=Array.isArray(imgUrls)?imgUrls.filter(isReceiptRef):[];   // ไม่มีไฟล์แนบจริง → ซ่อนปุ่มใบเสร็จ
     const receiptBtn=imgUrls.length>0
       ?`<span style="position:relative;display:inline-block;line-height:0"><img data-rthumb="${encodeURIComponent(imgUrls[0])}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy" style="min-width:36px;min-height:36px;background:#f1f5f9">${imgUrls.length>1?`<span class="rcount">${imgUrls.length}</span>`:''}</span>`
       :`<span style="color:var(--muted2);font-size:11px">—</span>`;
@@ -2666,7 +2679,7 @@ async function deleteTx(id){
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
     if(imgUrls.length>0){
       // แปลง public URL → storage path (หลัง /receipts/)
-      const paths=imgUrls.filter(u=>!isFrPhoto(u)).map(url=>{
+      const paths=(Array.isArray(imgUrls)?imgUrls:[]).filter(u=>isReceiptRef(u)&&!isFrPhoto(u)).map(url=>{
         const m=url.match(/\/receipts\/(.+)$/);
         return m?m[1]:null;
       }).filter(Boolean);
@@ -2690,7 +2703,7 @@ async function deleteTx(id){
 // Receipt lightbox — เปิดดูได้ทุกรูป (เดิมเปิดได้แค่รูปแรก)
 let lbUrls=[], lbIdx=0;
 async function lbOpen(rawUrls, startAt){
-  const list=(rawUrls||[]).filter(Boolean);
+  const list=(rawUrls||[]).filter(isReceiptRef);
   if(!list.length) return;
   lbUrls = await Promise.all(list.map(async u => (await receiptSignedUrl(u)) || u));
   lbIdx  = Math.min(Math.max(Number(startAt)||0, 0), lbUrls.length-1);
@@ -2716,6 +2729,7 @@ async function showLightboxTx(id){
   if(!tx||!tx.image_urls) return;
   let imgs=[];
   try{ imgs=JSON.parse(tx.image_urls)||[]; }catch{ return; }
+  if(!Array.isArray(imgs)) return;
   await lbOpen(imgs, 0);
 }
 /* เปิดจากรูปในหน้าแก้ไขรายการ — เริ่มที่ใบที่กด */
