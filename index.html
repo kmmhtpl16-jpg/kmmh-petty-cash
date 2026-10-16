@@ -247,6 +247,9 @@ tbody tr:hover td{background:#fafaf7}
 .lb-prev{left:14px}
 .lb-next{right:14px}
 .lb-count{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;font-size:13px;padding:5px 14px;border-radius:999px}
+.lb-err{background:#fff;color:#222;border-radius:10px;padding:18px 22px;text-align:center;max-width:80vw;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.lb-err-title{font-weight:700;font-size:15px;margin-bottom:4px}
+.lb-err-sub{font-size:12px;color:#666;margin-bottom:10px}
 .lb-close{position:absolute;top:14px;right:16px;background:rgba(255,255,255,.92);border:none;width:38px;height:38px;border-radius:50%;font-size:19px;cursor:pointer;color:#222;display:flex;align-items:center;justify-content:center}
 .rcount{position:absolute;top:-5px;right:-5px;background:var(--dark);color:#fff;font-size:9px;min-width:15px;height:15px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1;font-weight:700}
 
@@ -977,7 +980,12 @@ tbody tr:hover td{background:#fafaf7}
 <!-- ─── LIGHTBOX ─── -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <button class="lb-nav lb-prev" id="lbPrev" onclick="event.stopPropagation();lbStep(-1)" title="รูปก่อนหน้า">&#8249;</button>
-  <img id="lightboxImg" src="" alt="receipt" onclick="event.stopPropagation()">
+  <img id="lightboxImg" src="" alt="receipt" onclick="event.stopPropagation()" onerror="lbImgError()">
+  <div class="lb-err" id="lbErr" onclick="event.stopPropagation()" style="display:none">
+    <div class="lb-err-title">เปิดรูปนี้ไม่ได้</div>
+    <div class="lb-err-sub">ไฟล์อาจถูกลบ หรือไม่มีสิทธิ์เปิด · รูปอื่นยังเลื่อนดูได้</div>
+    <button class="btn btn-sm" id="lbRetry" onclick="lbRetry()">ลองใหม่</button>
+  </div>
   <button class="lb-nav lb-next" id="lbNext" onclick="event.stopPropagation();lbStep(1)" title="รูปถัดไป">&#8250;</button>
   <button class="lb-close" onclick="closeLightbox()" title="ปิด">&#10005;</button>
   <div class="lb-count" id="lbCount"></div>
@@ -2708,22 +2716,53 @@ async function deleteTx(id){
 }
 
 // Receipt lightbox — เปิดดูได้ทุกรูป (เดิมเปิดได้แค่รูปแรก)
-let lbUrls=[], lbIdx=0;
+// lbRaw = ค่ารูปดิบ (ใช้ขอลิงก์ใหม่ตอนกดลองใหม่) · lbUrls = signed URL หรือ null ถ้าขอไม่ได้
+// ไม่เอาค่าดิบไปใส่เป็นรูปแทน (เดิม fallback แล้วได้รูปแตก) → แสดงกล่อง "เปิดรูปนี้ไม่ได้ + ลองใหม่"
+let lbRaw=[], lbUrls=[], lbIdx=0, lbSeq=0;
 async function lbOpen(rawUrls, startAt){
   const src=Array.isArray(rawUrls)?rawUrls:[];
   const list=src.filter(hasReceiptFile);
   if(!list.length) return;
   // startAt นับจากรายการเดิม → แปลงเป็นลำดับในรายการที่กรองแล้ว (ไม่ให้เปิดผิดใบ)
   startAt=src.slice(0, Math.max(Number(startAt)||0, 0)).filter(hasReceiptFile).length;
-  lbUrls = await Promise.all(list.map(async u => (await receiptSignedUrl(u)) || u));
+  const seq=++lbSeq;   // กันผลของการเปิดรอบเก่ามาทับรอบใหม่
+  const urls=await Promise.all(list.map(u => receiptSignedUrl(u)));
+  if(seq!==lbSeq) return;
+  lbRaw=list; lbUrls=urls;
   lbIdx  = Math.min(Math.max(Number(startAt)||0, 0), lbUrls.length-1);
   lbShow();
   document.getElementById('lightbox').classList.add('open');
 }
+function lbSetError(on){
+  const img=document.getElementById('lightboxImg'), err=document.getElementById('lbErr');
+  if(img) img.style.display = on?'none':'';
+  if(err) err.style.display = on?'':'none';
+}
+function lbImgError(){
+  // ขอลิงก์ได้แต่โหลดรูปไม่ขึ้น (เช่น ไฟล์ถูกลบหลังขอลิงก์) — นับเป็นเปิดไม่ได้เหมือนกัน
+  const img=document.getElementById('lightboxImg');
+  if(!img || !img.getAttribute('src')) return;
+  // error ของรูปใบก่อน (เลื่อนไปใบอื่นแล้ว) ไม่นับ
+  if(!lbUrls[lbIdx] || img.getAttribute('src')!==lbUrls[lbIdx]) return;
+  lbUrls[lbIdx]=null;
+  lbSetError(true);
+}
+async function lbRetry(){
+  const i=lbIdx, seq=lbSeq, raw=lbRaw[i];
+  const b=document.getElementById('lbRetry');
+  if(b){ b.disabled=true; b.textContent='กำลังลอง...'; }
+  const url=await receiptSignedUrl(raw);
+  if(b){ b.disabled=false; b.textContent='ลองใหม่'; }
+  if(seq!==lbSeq || lbRaw[i]!==raw) return;
+  lbUrls[i]=url||null;
+  if(i===lbIdx) lbShow();
+}
 function lbShow(){
   const img=document.getElementById('lightboxImg');
   if(!img||!lbUrls.length) return;
-  img.src = lbUrls[lbIdx] || '';
+  const url=lbUrls[lbIdx];
+  if(url){ lbSetError(false); img.src=url; }
+  else { img.removeAttribute('src'); lbSetError(true); }
   const many = lbUrls.length>1;
   const c=document.getElementById('lbCount');
   if(c){ c.textContent = many ? ('รูปที่ '+(lbIdx+1)+' จาก '+lbUrls.length) : ''; c.style.display = many?'':'none'; }
@@ -2744,7 +2783,7 @@ async function showLightboxTx(id){
 }
 /* เปิดจากรูปในหน้าแก้ไขรายการ — เริ่มที่ใบที่กด */
 async function showLightboxEdit(i){ await lbOpen(existingImageUrls, i); }
-function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
+function closeLightbox(){ lbSeq++; document.getElementById('lightbox').classList.remove('open'); }
 /* ปุ่มลูกศรซ้าย-ขวา + Esc */
 document.addEventListener('keydown', e=>{
   const box=document.getElementById('lightbox');
