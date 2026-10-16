@@ -1017,6 +1017,8 @@ function receiptStoragePath(u){
   if(isFrPhoto(p) && !isReceiptRef(p.slice('fr-photos/'.length))) return null;
   return p;
 }
+/* มีไฟล์รูปจริงให้ขอ signed URL ได้ไหม — ใช้กรองก่อนแสดงปุ่ม/รูป */
+function hasReceiptFile(u){ return !!receiptStoragePath(u); }
 /* รูปงานจากโปรแกรมวงกบ เก็บเป็น "fr-photos/<path>" — ใช้ไฟล์เดิมใน bucket fr-photos ไม่ก๊อปซ้ำ */
 function isFrPhoto(u){ return typeof u==='string' && u.startsWith('fr-photos/'); }
 async function receiptSignedUrl(u, transform){
@@ -1660,7 +1662,7 @@ function renderTable(){
     // อ่าน Storage URL (ไม่ใช่ base64) จากฟิลด์ image_urls
     let imgUrls=[];
     try{ imgUrls=tx.image_urls?JSON.parse(tx.image_urls):[]; }catch{}
-    imgUrls=Array.isArray(imgUrls)?imgUrls.filter(isReceiptRef):[];   // ไม่มีไฟล์แนบจริง → ซ่อนปุ่มใบเสร็จ
+    imgUrls=Array.isArray(imgUrls)?imgUrls.filter(hasReceiptFile):[];   // ไม่มีไฟล์แนบจริง → ซ่อนปุ่มใบเสร็จ
     const receiptBtn=imgUrls.length>0
       ?`<span style="position:relative;display:inline-block;line-height:0"><img data-rthumb="${encodeURIComponent(imgUrls[0])}" class="receipt-thumb" onclick="showLightboxTx('${tx.id}')" title="ดูใบเสร็จ (${imgUrls.length} รูป)" alt="receipt" loading="lazy" style="min-width:36px;min-height:36px;background:#f1f5f9">${imgUrls.length>1?`<span class="rcount">${imgUrls.length}</span>`:''}</span>`
       :`<span style="color:var(--muted2);font-size:11px">—</span>`;
@@ -2708,11 +2710,11 @@ async function deleteTx(id){
 // Receipt lightbox — เปิดดูได้ทุกรูป (เดิมเปิดได้แค่รูปแรก)
 let lbUrls=[], lbIdx=0;
 async function lbOpen(rawUrls, startAt){
-  const src=rawUrls||[];
-  const list=src.filter(isReceiptRef);
+  const src=Array.isArray(rawUrls)?rawUrls:[];
+  const list=src.filter(hasReceiptFile);
   if(!list.length) return;
   // startAt นับจากรายการเดิม → แปลงเป็นลำดับในรายการที่กรองแล้ว (ไม่ให้เปิดผิดใบ)
-  startAt=src.slice(0, Math.max(Number(startAt)||0, 0)).filter(isReceiptRef).length;
+  startAt=src.slice(0, Math.max(Number(startAt)||0, 0)).filter(hasReceiptFile).length;
   lbUrls = await Promise.all(list.map(async u => (await receiptSignedUrl(u)) || u));
   lbIdx  = Math.min(Math.max(Number(startAt)||0, 0), lbUrls.length-1);
   lbShow();
