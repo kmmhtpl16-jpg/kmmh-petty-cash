@@ -1002,15 +1002,20 @@ async function pcCheckPin(pin, roles){
 // ── รูปใบเสร็จผ่าน signed URL (bucket receipts = private) ──
 /* ค่ารูปใช้ได้จริงไหม — กัน null / "" / "null" / "undefined" (เคยยิง /sign/receipts/null → 400) */
 function isReceiptRef(u){
-  if(u==null) return false;
-  const s=String(u).trim();
+  if(typeof u!=='string') return false;
+  const s=u.trim();
   return s!=='' && s!=='null' && s!=='undefined';
 }
 function receiptStoragePath(u){
-  if(!isReceiptRef(u)) return null; u=String(u).trim();
+  if(!isReceiptRef(u)) return null; u=u.trim();
   const m=u.match(/\/receipts\/([^?]+)/);
-  const p=m?decodeURIComponent(m[1]):(u.includes('://')?null:u);
-  return isReceiptRef(p)?p:null;
+  let p=null;
+  if(m){ try{ p=decodeURIComponent(m[1]); }catch{ return null; } }
+  else if(!u.includes('://')) p=u;
+  if(!isReceiptRef(p)) return null;
+  // "fr-photos/" ที่ไม่มีชื่อไฟล์ต่อท้าย = ไม่มีรูปจริง
+  if(isFrPhoto(p) && !isReceiptRef(p.slice('fr-photos/'.length))) return null;
+  return p;
 }
 /* รูปงานจากโปรแกรมวงกบ เก็บเป็น "fr-photos/<path>" — ใช้ไฟล์เดิมใน bucket fr-photos ไม่ก๊อปซ้ำ */
 function isFrPhoto(u){ return typeof u==='string' && u.startsWith('fr-photos/'); }
@@ -2703,8 +2708,11 @@ async function deleteTx(id){
 // Receipt lightbox — เปิดดูได้ทุกรูป (เดิมเปิดได้แค่รูปแรก)
 let lbUrls=[], lbIdx=0;
 async function lbOpen(rawUrls, startAt){
-  const list=(rawUrls||[]).filter(isReceiptRef);
+  const src=rawUrls||[];
+  const list=src.filter(isReceiptRef);
   if(!list.length) return;
+  // startAt นับจากรายการเดิม → แปลงเป็นลำดับในรายการที่กรองแล้ว (ไม่ให้เปิดผิดใบ)
+  startAt=src.slice(0, Math.max(Number(startAt)||0, 0)).filter(isReceiptRef).length;
   lbUrls = await Promise.all(list.map(async u => (await receiptSignedUrl(u)) || u));
   lbIdx  = Math.min(Math.max(Number(startAt)||0, 0), lbUrls.length-1);
   lbShow();
