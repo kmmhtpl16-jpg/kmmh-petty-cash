@@ -46,6 +46,9 @@ body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--dark);fon
 .pin-key:active{transform:scale(.93)}
 .pin-key.del{font-size:13px;color:var(--red)}
 .pin-key.zero{grid-column:2}
+.pin-key.ok{font-size:13px;color:var(--green)}
+.pin-key:disabled{opacity:.3;cursor:default}
+.pin4-btn{display:none;margin-top:6px;width:100%;padding:6px;border:1.5px solid var(--amber-border);border-radius:6px;background:#fff;font-size:13px;cursor:pointer}
 .pin-error{color:var(--red);font-size:12px;font-weight:700;min-height:18px;margin-bottom:.5rem}
 .pin-shake{animation:shake .3s ease}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
@@ -325,6 +328,8 @@ tbody tr:hover td{background:#fafaf7}
       <div class="pin-dot" id="d1"></div>
       <div class="pin-dot" id="d2"></div>
       <div class="pin-dot" id="d3"></div>
+      <div class="pin-dot" id="d4"></div>
+      <div class="pin-dot" id="d5"></div>
     </div>
     <div class="pin-error" id="pinError"></div>
     <div class="login-loading" id="loginLoading"></div>
@@ -340,6 +345,7 @@ tbody tr:hover td{background:#fafaf7}
       <button class="pin-key" onclick="pinKey('9')">9</button>
       <button class="pin-key del" onclick="pinDel()">⌫ ลบ</button>
       <button class="pin-key zero" onclick="pinKey('0')">0</button>
+      <button class="pin-key ok" id="pinOkBtn" onclick="pinOk()" disabled title="สำหรับ PIN 4 หลักเดิม">ตกลง</button>
     </div>
     <div style="font-size:10px;color:var(--muted2);margin-top:.25rem">v4 · Cloud · Supabase · <span id="buildStamp"></span></div>
   </div>
@@ -764,7 +770,7 @@ tbody tr:hover td{background:#fafaf7}
   </div>
   <div class="mgr-pin-wrap">
     <label>🔑 PIN ผู้ตรวจสอบ (Auditor PIN) — จำเป็น</label>
-    <input type="password" id="wrAuditPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkWrAuditPin()" autocomplete="off">
+    <input type="password" id="wrAuditPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkWrAuditPin()" autocomplete="off">
     <div class="mgr-pin-status" id="wrAuditPinStatus"></div>
   </div>
   <div class="modal-btns">
@@ -789,7 +795,7 @@ tbody tr:hover td{background:#fafaf7}
   </div>
   <div class="mgr-pin-wrap">
     <label>🔑 PIN ผู้จัดการ (Manager PIN) — จำเป็น</label>
-    <input type="password" id="wrMgrPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkWrMgrPin()" autocomplete="off">
+    <input type="password" id="wrMgrPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkWrMgrPin()" autocomplete="off">
     <div class="mgr-pin-status" id="wrMgrPinStatus"></div>
   </div>
   <div class="modal-btns">
@@ -839,7 +845,7 @@ tbody tr:hover td{background:#fafaf7}
   <div id="reviewKonSummary" style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.9;margin-bottom:1rem"></div>
   <div class="mgr-pin-wrap">
     <label id="reviewPinLabel">🔑 PIN ผู้ตรวจสอบ — จำเป็น</label>
-    <input type="password" id="reviewPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkReviewPin()" autocomplete="off">
+    <input type="password" id="reviewPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkReviewPin()" autocomplete="off">
     <div class="mgr-pin-status" id="reviewPinStatus"></div>
   </div>
   <div class="field" id="rejectReasonRow" style="display:none">
@@ -865,7 +871,7 @@ tbody tr:hover td{background:#fafaf7}
   <div id="cancelKonSummary" style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.9;margin-bottom:1rem"></div>
   <div class="mgr-pin-wrap">
     <label>🔑 PIN ผู้จัดการ — จำเป็น</label>
-    <input type="password" id="cancelKonPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCancelKonPin()" autocomplete="off">
+    <input type="password" id="cancelKonPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkCancelKonPin()" autocomplete="off">
     <div class="mgr-pin-status" id="cancelKonPinStatus"></div>
   </div>
   <div class="field">
@@ -912,7 +918,7 @@ tbody tr:hover td{background:#fafaf7}
   </div>
   <div class="mgr-pin-wrap">
     <label>🔑 PIN ผู้ตรวจสอบ — จำเป็น</label>
-    <input type="password" id="countAuditPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCountAuditPin()" autocomplete="off">
+    <input type="password" id="countAuditPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkCountAuditPin()" autocomplete="off">
     <div class="mgr-pin-status" id="countAuditPinStatus"></div>
   </div>
   <div class="modal-btns">
@@ -930,7 +936,7 @@ tbody tr:hover td{background:#fafaf7}
   <div id="deleteCountInfo" style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.8;color:#7a0000"></div>
   <div class="mgr-pin-wrap" style="flex:1">
     <label>🔑 PIN ผู้ตรวจสอบ หรือ ผู้จัดการ — จำเป็น</label>
-    <input type="password" id="deleteCountPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkDeleteCountPin()" autocomplete="off">
+    <input type="password" id="deleteCountPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkDeleteCountPin()" autocomplete="off">
     <div class="mgr-pin-status" id="deleteCountPinStatus"></div>
   </div>
   <div class="modal-btns" style="flex-shrink:0">
@@ -951,7 +957,7 @@ tbody tr:hover td{background:#fafaf7}
 </div>
 <div class="mgr-pin-wrap">
 <label>🔑 PIN ผู้จัดการ หรือ ผู้ตรวจสอบ — จำเป็น</label>
-<input type="password" id="cpPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkCountPin()" autocomplete="off">
+<input type="password" id="cpPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkCountPin()" autocomplete="off">
 <div class="mgr-pin-status" id="cpPinStatus"></div>
 </div>
 <div class="modal-btns">
@@ -968,7 +974,7 @@ tbody tr:hover td{background:#fafaf7}
 <div id="dcInfo" style="background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;line-height:1.9"></div>
 <div class="mgr-pin-wrap">
 <label>🔑 PIN ผู้ตรวจสอบ หรือ ผู้จัดการ — จำเป็น</label>
-<input type="password" id="dcPin" class="mgr-pin-inp" maxlength="4" placeholder="••••" oninput="checkDailyPin()" autocomplete="off">
+<input type="password" id="dcPin" class="mgr-pin-inp" maxlength="6" inputmode="numeric" placeholder="PIN" oninput="checkDailyPin()" autocomplete="off">
 <div class="mgr-pin-status" id="dcPinStatus"></div>
 </div>
 <div class="modal-btns">
@@ -1009,6 +1015,36 @@ async function pcCheckPin(pin, roles){
   if(error) return {data:null,error};
   return {data:(data&&data.id)?data:null,error:null};
 }
+// ── SEC-1A F2: กล่องยืนยัน PIN ผู้จัดการ/ผู้ตรวจ — ตรวจเมื่อครบ 6 หลัก หรือ PIN 4 หลักเมื่อกด "ตรวจรหัส 4 หลัก"/Enter เท่านั้น
+// (เดิมตรวจทุกครั้งที่พิมพ์ครบ 4 ตัว → PIN 6 หลักจะถูกนับผิด 2 ครั้งทุกการยืนยัน)
+function pinReady(val,id){
+  val=String(val||'');
+  if(val.length===6) return true;
+  if(val.length===4 && (typeof PIN_ALLOW_4==='undefined' || PIN_ALLOW_4)){ const el=document.getElementById(id); return !!(el&&el._ok4); }
+  return false;
+}
+// r3-fu (ChatGPT ข้อ 2): ผลตรวจ PIN ที่กลับมาช้า ต้องไม่เปิดปุ่ม — ทุกช่องมีเลขรอบคำขอ · ผลใช้ได้เมื่อยังเป็นรอบล่าสุด และค่าในช่องยังเท่าเดิม
+const _pinSeq={};
+function _pinReq(id){ _pinSeq[id]=(_pinSeq[id]||0)+1; return _pinSeq[id]; }
+function _pinStale(id,val,seq){ const el=document.getElementById(id); return !el || String(el.value)!==String(val) || _pinSeq[id]!==seq || !pinReady(val,id); }   // + ยังพร้อมจริง (เช่นสถานะยืนยัน 4 หลักถูกล้างระหว่างรอ)
+function _pin4Confirm(el){ if(!el||String(el.value||'').length!==4||el._ok4) return; el._ok4=true; if(typeof el.oninput==='function') el.oninput(); }   // r2: กดตรวจ/Enter ซ้ำค่าเดิม = ไม่ส่งซ้ำ (ต้องแก้ช่องก่อน)
+document.addEventListener('input',function(e){   // capture: ล้างสถานะ "ยืนยัน 4 หลัก" ก่อนตัวตรวจของช่องทำงาน
+  const el=e.target; if(!el||!el.classList||!el.classList.contains('mgr-pin-inp')) return;
+  el._ok4=false;
+  const b=el.nextElementSibling; if(b&&b.classList&&b.classList.contains('pin4-btn')) b.style.display=(String(el.value).length===4 && PIN_ALLOW_4)?'block':'none';
+},true);
+document.addEventListener('keydown',function(e){
+  const el=e.target; if(e.key==='Enter' && el&&el.classList&&el.classList.contains('mgr-pin-inp')){ e.preventDefault(); _pin4Confirm(el); }
+},true);
+function _pin4Buttons(){
+  document.querySelectorAll('.mgr-pin-inp').forEach(function(el){
+    if(el.nextElementSibling&&el.nextElementSibling.classList&&el.nextElementSibling.classList.contains('pin4-btn')) return;
+    const b=document.createElement('button'); b.type='button'; b.className='pin4-btn'; b.textContent='ตรวจรหัส (PIN 4 หลักเดิม)';
+    b.addEventListener('click',function(){ _pin4Confirm(el); });
+    el.insertAdjacentElement('afterend',b);
+  });
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',_pin4Buttons); else _pin4Buttons();
 // ── รูปใบเสร็จผ่าน signed URL (bucket receipts = private) ──
 /* ค่ารูปใช้ได้จริงไหม — กัน null / "" / "null" / "undefined" (เคยยิง /sign/receipts/null → 400) */
 function isReceiptRef(u){
@@ -1101,7 +1137,7 @@ const COMPRESS_MAX=200*1024, COMPRESS_SIZE=1200, COMPRESS_QUALITY=0.65;
 // ══════════════════════════════════════════════
 // STATE
 // ══════════════════════════════════════════════
-const APP_BUILD='2026-08-20-labour4';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
+const APP_BUILD='2026-10-15-pin6';  // อัปเดตทุกครั้งที่ deploy — ใช้เช็คว่าเครื่องโหลดเวอร์ชันล่าสุดหรือยัง
 let currentRole = null;      // null | 'cashier' | 'manager'
 let currentUser = null;      // row from petty_cash_users
 let currentPin  = '';        // 🪚 เก็บไว้ส่งให้ RPC ค่าแรงช่าง (ไม่แสดงบนจอ ไม่เก็บลง storage)
@@ -1128,24 +1164,33 @@ document.addEventListener('keydown', function(e){
   const loginScreen = document.getElementById('loginScreen');
   if(!loginScreen || loginScreen.style.display==='none') return;
   if(e.key>='0'&&e.key<='9') pinKey(e.key);
-  else if(e.key==='Backspace') pinKey('back');
-  else if(e.key==='Enter' && pinBuffer.length===4) submitPin();
+  else if(e.key==='Backspace') pinDel();   // SEC-1A F2 r2: เดิม pinKey('back') ต่อคำว่า "back" เข้า PIN
+  else if(e.key==='Enter' && pinCanSubmit()) submitPin();
 });
 
+// ── SEC-1A F2: รองรับ PIN 6 หลัก (ช่วงเปลี่ยนผ่านรับ PIN 4 หลักเดิมผ่านปุ่ม "ตกลง") ──
+// PIN 6 หลัก: ส่งอัตโนมัติเมื่อครบ 6 · PIN 4 หลัก: ไม่ส่งเอง ต้องกด "ตกลง"/Enter (กันส่ง PIN 6 หลักที่เพิ่งพิมพ์ได้ 4 ตัว)
+// หลังหมุน PIN ครบทุกคน: ตั้ง PIN_ALLOW_4 = false (F2 รอบสอง)
+const PIN_MAX=6, PIN_ALLOW_4=true;
+let _pinAutoT=null;   // r2: ระหว่างรอส่งอัตโนมัติ (120 ms) ห้าม Enter/ตกลง ส่งซ้ำ (เดิมส่ง 2 ครั้ง ครั้งที่ 2 เป็น PIN ว่าง)
+function pinCanSubmit(){ return !_pinAutoT && (pinBuffer.length===PIN_MAX || (PIN_ALLOW_4 && pinBuffer.length===4)); }
+function pinOk(){ if(pinCanSubmit()) submitPin(); }
 function pinKey(k){
-  if(pinBuffer.length>=4) return;
+  if(pinBuffer.length>=PIN_MAX) return;
   pinBuffer+=k;
   updatePinDots();
-  if(pinBuffer.length===4) setTimeout(submitPin,120);
+  if(pinBuffer.length===PIN_MAX) _pinAutoT=setTimeout(function(){ _pinAutoT=null; if(pinBuffer.length===PIN_MAX) submitPin(); },120);
 }
 function pinDel(){
+  if(_pinAutoT){ clearTimeout(_pinAutoT); _pinAutoT=null; }   // r2: ลบระหว่างรอส่ง = ยกเลิกการส่ง (เดิมส่ง 5 ตัว → นับผิด)
   pinBuffer=pinBuffer.slice(0,-1);
   updatePinDots();
   document.getElementById('pinError').textContent='';
 }
 function updatePinDots(){
-  for(let i=0;i<4;i++)
+  for(let i=0;i<PIN_MAX;i++)
     document.getElementById('d'+i).classList.toggle('filled',i<pinBuffer.length);
+  const ok=document.getElementById('pinOkBtn'); if(ok) ok.disabled=!(PIN_ALLOW_4 && pinBuffer.length===4);
 }
 
 // ── Rate-limit guard: ป้องกัน brute-force PIN ──
@@ -1251,7 +1296,7 @@ async function enterApp(){
 function doLogout(){
   if(!confirm('ออกจากระบบ?')) return;
   currentRole=null; currentUser=null; currentPin=''; pinBuffer='';
-  LAB={rows:[],other:{},loaded:false,loading:false};
+  LAB={rows:[],other:{},loaded:false,loading:false,denied:false};
   INS={rows:[],loaded:false,loading:false}; insPendingId=null;
   updatePinDots();
   document.getElementById('pinError').textContent='';
@@ -1580,7 +1625,7 @@ function render(){
     : '<span class="period-open-badge">🟢 เปิดอยู่</span>';
   const pact=document.getElementById('periodActions');
   pact.innerHTML='';  // ลบปุ่ม "ปิดยอดเดือนนี้" (ชื่อหลอก + เรียก closeKon ซ้ำกับแท็บปิดก้อน) — ปิดก้อนผ่านแท็บ "ปิดก้อน/ตรวจนับ" เท่านั้น
-  if(!LAB.loaded && !LAB.loading && currentRole!=='auditor') loadLabour(false);
+  if(!LAB.loaded && !LAB.loading && !LAB.denied && !(LAB.retryAt > Date.now()) && currentPin && currentRole!=='auditor') loadLabour(false);
   if(!INS.loaded && !INS.loading) loadInsProposals(false);
   renderAlerts(); renderCards(); renderDiff(); renderTable();
   if(document.getElementById('view-summary').style.display!=='none') renderSummary(); renderClosedPeriods();
@@ -1882,9 +1927,11 @@ async function checkDeleteCountPin(){
   const val=document.getElementById('deleteCountPin').value;
   const status=document.getElementById('deleteCountPinStatus');
   const btn=document.getElementById('btnDeleteCountConfirm');
-  btn.disabled=true; btn.style.opacity='.4';
-  if(val.length<4) return;
+  btn.disabled=true; btn.style.opacity='.4'; btn._confirmedBy='';
+  const seq=_pinReq('deleteCountPin');
+  if(!pinReady(val,'deleteCountPin')) return;
   const {data,error}=await pcCheckPin(val,['auditor','manager']);
+  if(_pinStale('deleteCountPin',val,seq)) return;   // r3-fu: ผลเก่า (ช่องถูกแก้/ล้าง หรือมีคำขอใหม่กว่า) ไม่ใช้
   if(error||!data){
     status.textContent='❌ PIN ไม่ถูกต้อง (ต้องเป็นผู้ตรวจสอบหรือผู้จัดการ)';
     status.style.color='var(--red)';
@@ -1984,9 +2031,11 @@ const val=document.getElementById('cpPin').value;
 const status=document.getElementById('cpPinStatus');
 const btn=document.getElementById('btnConfirmCountPin');
 btn.disabled=true; btn.style.opacity='.4'; btn._confirmedName=''; btn._confirmedRole='';
-if(val.length<4){ status.textContent=''; return; }
+const seq=_pinReq('cpPin');
+if(!pinReady(val,'cpPin')){ status.textContent=''; return; }
 try{
 const {data}=await pcCheckPin(val,['manager','auditor']);
+if(_pinStale('cpPin',val,seq)) return;   // r3-fu
 if(data){
 status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
 status.style.color='var(--green)';
@@ -2068,8 +2117,10 @@ async function checkCountAuditPin(){
   const status=document.getElementById('countAuditPinStatus');
   const btn=document.getElementById('btnCountAuditConfirm');
   btn.disabled=true; btn.style.opacity='.4'; btn._auditorName=''; btn._auditorId='';
-  if(val.length<4) return;
+  const seq=_pinReq('countAuditPin');
+  if(!pinReady(val,'countAuditPin')) return;
   const {data,error}=await pcCheckPin(val,['auditor']);
+  if(_pinStale('countAuditPin',val,seq)) return;   // r3-fu
   if(error||!data){
     status.textContent='❌ PIN ไม่ถูกต้อง';
     status.style.color='var(--red)';
@@ -2205,9 +2256,11 @@ async function checkDailyPin(){
   const status=document.getElementById('dcPinStatus');
   const btn=document.getElementById('btnConfirmDailyPin');
   btn.disabled=true; btn.style.opacity='.4'; btn.style.cursor='not-allowed'; btn._auditorName=''; btn._auditorRole='';
-  if(val.length<4){ status.textContent=''; return; }
+  const seq=_pinReq('dcPin');
+  if(!pinReady(val,'dcPin')){ status.textContent=''; return; }
   try{
     const {data}=await pcCheckPin(val,['manager','auditor']);
+    if(_pinStale('dcPin',val,seq)) return;   // r3-fu
     if(data){
       status.textContent=`✅ ${data.name} (${data.role==='manager'?'ผู้จัดการ':'ผู้ตรวจสอบ'})`;
       status.style.color='var(--green)';
@@ -3004,16 +3057,17 @@ async function checkReviewPin(){
   const btnConfirm=document.getElementById('btnConfirmReview');
   const btnReject=document.getElementById('btnRejectKon');
   const status=document.getElementById('reviewPinStatus');
-  if(val.length<4){
-    btnConfirm.disabled=true; btnConfirm.style.opacity='.4';
-    btnReject.disabled=true; btnReject.style.opacity='.4';
-    status.textContent=''; return;
-  }
+  // r3-fu: ทุกครั้งที่ช่องเปลี่ยน → ปิดปุ่มและล้างผู้ยืนยันเดิมก่อน แล้วค่อยรอผลรอบล่าสุด
+  btnConfirm.disabled=true; btnConfirm.style.opacity='.4';
+  btnReject.disabled=true; btnReject.style.opacity='.4'; btnConfirm._confirmedUser=null;
+  const seq=_pinReq('reviewPin');
+  if(!pinReady(val,'reviewPin')){ status.textContent=''; return; }
   const role=_reviewMode==='approve'?'manager':'auditor';
   // manager สามารถข้ามขั้น review ได้
   const roles=_reviewMode==='review'?['auditor','manager']:['manager'];
   try{
     const {data}=await pcCheckPin(val,roles);
+    if(_pinStale('reviewPin',val,seq)) return;   // r3-fu
     if(data){
       btnConfirm.disabled=false; btnConfirm.style.opacity='1';
       btnReject.disabled=false; btnReject.style.opacity='1';
@@ -3132,9 +3186,12 @@ async function checkCancelKonPin(){
   const val=document.getElementById('cancelKonPin').value;
   const btn=document.getElementById('btnConfirmCancelKon');
   const status=document.getElementById('cancelKonPinStatus');
-  if(val.length<4){ btn.disabled=true; btn.style.opacity='.4'; btn._confirmedUser=null; status.textContent=''; return; }
+  btn.disabled=true; btn.style.opacity='.4'; btn._confirmedUser=null;   // r3-fu: ช่องเปลี่ยน = ปิดปุ่ม/ล้างผู้ยืนยันก่อนเสมอ
+  const seq=_pinReq('cancelKonPin');
+  if(!pinReady(val,'cancelKonPin')){ status.textContent=''; return; }
   try{
     const {data}=await pcCheckPin(val,['manager']);
+    if(_pinStale('cancelKonPin',val,seq)) return;   // r3-fu
     if(data){
       btn.disabled=false; btn.style.opacity='1'; btn._confirmedUser=data;
       status.textContent='✅ '+(data.name||'ผู้จัดการ'); status.style.color='var(--green)';
@@ -3274,9 +3331,12 @@ async function checkCmMgrPin(){
   const val=document.getElementById('cmMgrPin')?.value;
   const btn=document.getElementById('btnSaveCloseMonth');
   const status=document.getElementById('cmMgrPinStatus');
-  if(!val||val.length<4){ if(btn){btn.disabled=true;btn.style.opacity='.4';} if(status)status.textContent=''; return; }
+  if(btn){ btn.disabled=true; btn.style.opacity='.4'; btn._confirmedMgrId=null; btn._confirmedMgrName=null; }   // r3-fu: ช่องเปลี่ยน = ปิดปุ่ม/ล้างผู้ยืนยันก่อนเสมอ
+  const seq=_pinReq('cmMgrPin');
+  if(!val||!pinReady(val,'cmMgrPin')){ if(status)status.textContent=''; return; }
   try{
     const {data}=await pcCheckPin(val,['manager']);
+    if(_pinStale('cmMgrPin',val,seq)) return;   // r3-fu
     if(data&&btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent=`✅ ปิดก้อนนี้ (${data.name||'Manager'})`; if(status){status.textContent=`✅ ${data.name}`; status.style.color='var(--green)';} btn._confirmedMgrId=data.id; btn._confirmedMgrName=data.name||'Manager'; }
     else { if(btn){btn.disabled=true;btn.style.opacity='.4';} if(status){status.textContent='❌ รหัสไม่ถูกต้อง';status.style.color='var(--red)';} if(document.getElementById('cmMgrPin'))document.getElementById('cmMgrPin').value=''; }
   }catch(e){ if(status){status.textContent='❌ '+e.message;status.style.color='var(--red)';} }
@@ -4234,13 +4294,14 @@ async function checkWrAuditPin(){
   const status=document.getElementById('wrAuditPinStatus');
   const btnA=document.getElementById('btnWrAuditApprove');
   const btnR=document.getElementById('btnWrAuditReject');
-  if(val.length<4){
-    btnA.disabled=true; btnA.style.opacity='.4';
-    btnR.disabled=true; btnR.style.opacity='.4';
-    status.textContent=''; return;
-  }
+  // r3-fu: ช่องเปลี่ยน = ปิดปุ่ม/ล้างผู้ยืนยันก่อนเสมอ แล้วค่อยรอผลรอบล่าสุด
+  btnA.disabled=true; btnA.style.opacity='.4';
+  btnR.disabled=true; btnR.style.opacity='.4'; btnA._auditorId=null; btnA._auditorName=null;
+  const seq=_pinReq('wrAuditPin');
+  if(!pinReady(val,'wrAuditPin')){ status.textContent=''; return; }
   try{
     const {data}=await pcCheckPin(val,['auditor']);
+    if(_pinStale('wrAuditPin',val,seq)) return;   // r3-fu
     if(data){
       btnA.disabled=false; btnA.style.opacity='1';
       btnR.disabled=false; btnR.style.opacity='1';
@@ -4306,13 +4367,14 @@ async function checkWrMgrPin(){
   const status=document.getElementById('wrMgrPinStatus');
   const btnA=document.getElementById('btnWrMgrApprove');
   const btnR=document.getElementById('btnWrMgrReject');
-  if(val.length<4){
-    btnA.disabled=true; btnA.style.opacity='.4';
-    btnR.disabled=true; btnR.style.opacity='.4';
-    status.textContent=''; return;
-  }
+  // r3-fu: ช่องเปลี่ยน = ปิดปุ่ม/ล้างผู้ยืนยันก่อนเสมอ แล้วค่อยรอผลรอบล่าสุด
+  btnA.disabled=true; btnA.style.opacity='.4';
+  btnR.disabled=true; btnR.style.opacity='.4'; btnA._mgrName=null;
+  const seq=_pinReq('wrMgrPin');
+  if(!pinReady(val,'wrMgrPin')){ status.textContent=''; return; }
   try{
     const {data}=await pcCheckPin(val,['manager']);
+    if(_pinStale('wrMgrPin',val,seq)) return;   // r3-fu
     if(data){
       btnA.disabled=false; btnA.style.opacity='1';
       btnR.disabled=false; btnR.style.opacity='1';
@@ -4416,7 +4478,7 @@ function fmtDatetime(ts){
 // 🪚 ค่าแรงช่างวงกบ (เฟส 2) — บิลค่าแรง + ตัดจ่ายจากเงินสดย่อย
 //    บิลเกิดตอน "ส่งเข้ารายการผลิต" ในโปรแกรมวงกบ · ที่นี่มีหน้าที่ "จ่าย" อย่างเดียว
 // ══════════════════════════════════════════════
-let LAB = {rows:[], other:{}, loaded:false, loading:false};
+let LAB = {rows:[], other:{}, loaded:false, loading:false, denied:false};
 
 // ══ 🐷 เบิกเงินประกันงานที่ HR ส่งมารอลงรายการจ่ายจริง ══
 let INS = {rows:[], loaded:false, loading:false};
@@ -4484,23 +4546,29 @@ function esc(s){ return String(s==null?'':s)
 
 function labSay(el,txt,cls){ const e=document.getElementById(el); if(e) e.innerHTML = txt?`<div class="alert alert-${cls||'danger'}"><span>${txt}</span></div>`:''; }
 
+// SEC-1A F2 r2: ถ้า PIN ที่ล็อกอินไว้ใช้ไม่ได้แล้ว (เช่นเพิ่งหมุน PIN) → หยุดเรียกเองทันที ไม่งั้นทุกการรีเฟรชหน้า
+// จะนับเป็นใส่รหัสผิด 1 ครั้ง จนเครื่องในร้านโดนพักทั้งร้าน · ต้องออกแล้วเข้าใหม่ด้วย PIN ปัจจุบัน
+const LAB_DENIED_MSG='รหัสที่ใช้เข้าระบบครั้งนี้ใช้ไม่ได้แล้ว (อาจมีการเปลี่ยน PIN) — กรุณาออกจากระบบแล้วเข้าใหม่ด้วย PIN ปัจจุบัน';
 async function loadLabour(showUi){
   if(LAB.loading) return;
+  if(LAB.denied || !currentPin){ if(showUi!==false) labSay('labMsg', LAB_DENIED_MSG, 'danger'); return; }
   LAB.loading = true;
   try{
     const {data,error} = await sb.rpc('fr_labour_bill_list',{p_pin:currentPin, p_show_closed:false});
     if(error) throw new Error(error.message);
+    if(data && data.ok===false && /ไม่มีสิทธิ์/.test(String(data.error||''))){ LAB.denied=true; currentPin=''; showToast(LAB_DENIED_MSG,'error'); throw new Error(LAB_DENIED_MSG); }   // r3: แจ้งทันทีแม้โหลดเบื้องหลัง
     if(!data || !data.ok) throw new Error((data&&data.error)||'อ่านข้อมูลบิลไม่ได้');
     LAB.rows = data.rows||[]; LAB.other = data.other_month||{}; LAB.today = data.today;
     LAB.hist = data.other_rows||[];   // รายการ 5211-20 เดือนนี้ ทีละแถว
-    LAB.loaded = true;
+    LAB.loaded = true; LAB.retryAt = 0;
     // ล้างการเลือกของบิลที่หายไปแล้ว
     Object.keys(LAB_SEL).forEach(k=>{ if(!LAB.rows.some(b=>String(b.bill_id)===k)) delete LAB_SEL[k]; });
     renderAlerts();
     if(showUi!==false) renderLabour();
   }catch(e){
     LAB.loaded = false;
-    if(showUi!==false) labSay('labMsg','โหลดบิลค่าแรงไม่สำเร็จ: '+e.message);
+    LAB.retryAt = Date.now() + 60000;   // r3: พลาดแบบอื่น (เช่นโดนพัก/เน็ตหลุด) → render ไม่เรียกซ้ำเองภายใน 60 วิ · ปุ่มรีเฟรชยังกดได้
+    if(showUi!==false) labSay('labMsg','โหลดบิลค่าแรงไม่สำเร็จ: '+esc(e.message));
   }finally{ LAB.loading = false; }
 }
 
@@ -4555,10 +4623,10 @@ function renderLabour(){
           <td style="text-align:center">
             <input type="checkbox" style="width:19px;height:19px"
                    ${LAB_SEL[b.bill_id]?'checked':''} onchange="labToggle(${b.bill_id},this.checked)"></td>
-          <td><b>${b.job_no||''}</b>
-              <div class="audit-time">${b.bill_no||''} · ${fmtDate(b.bill_date)}${
+          <td><b>${esc(b.job_no)}</b>
+              <div class="audit-time">${esc(b.bill_no)} · ${fmtDate(b.bill_date)}${
                 days>7 ? ' · <span style="color:var(--red)">ค้าง '+days+' วัน</span>' : ''}</div></td>
-          <td class="desc">${b.customer_name||'—'}${labPhotoStrip(b)}</td>
+          <td class="desc">${esc(b.customer_name||'—')}${labPhotoStrip(b)}</td>
           <td class="mono" style="text-align:center">${fmt(b.sets_ordered)}</td>
           <td class="mono num-norm" style="text-align:right">${fmt2(b.amount_expected)}</td>
           <td class="mono ${part?'num-green':''}" style="text-align:right">${part?fmt2(paid):'—'}</td>
@@ -4704,18 +4772,18 @@ function openLabourPay(){
       const leftL = Number(l.qty||0) - Number(l.paid_sets||0);
       if(leftL<=0) return '';
       return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
-        <div style="flex:1;min-width:180px;font-size:13px">${l.descr||('รายการที่ '+l.seq)}
+        <div style="flex:1;min-width:180px;font-size:13px">${esc(l.descr||('รายการที่ '+l.seq))}
           <span class="audit-time">เหลือ ${fmt(leftL)} วง × ${fmt(l.rate)} บาท</span></div>
         <div style="display:flex;align-items:center;gap:6px">
           <input type="number" class="cfg-input labsets" style="width:80px" min="0" max="${leftL}" step="1"
-                 data-bill="${b.bill_id}" data-seq="${l.seq}" data-rate="${l.rate}" data-left="${leftL}"
+                 data-bill="${esc(b.bill_id)}" data-seq="${esc(l.seq)}" data-rate="${esc(l.rate)}" data-left="${leftL}"
                  value="${leftL}" oninput="labRecalc()">
           <span class="cfg-unit">วง</span>
         </div></div>`;
     }).join('');
     return `<div class="wr-card" data-billcard="${b.bill_id}" style="margin-top:10px">
-      <div><b>${b.job_no||''}</b>${b.customer_name?' · '+b.customer_name:''}
-        <span class="audit-time">${b.bill_no} · เหลือ ${fmt(labLeftSets(b))} วง / ${fmt2(b.left_amount)} บาท</span></div>
+      <div><b>${esc(b.job_no)}</b>${b.customer_name?' · '+esc(b.customer_name):''}
+        <span class="audit-time">${esc(b.bill_no)} · เหลือ ${fmt(labLeftSets(b))} วง / ${fmt2(b.left_amount)} บาท</span></div>
       ${lines}
       <div class="labreasonwrap" data-bill="${b.bill_id}" style="display:none;margin-top:8px">
         <div class="cfg-label" style="color:#8a5b00">⚠️ <span class="labshort"></span> — ต้องใส่เหตุผล</div>
@@ -4787,6 +4855,7 @@ async function doLabourPay(){
   }).filter(x=>x.lines.length);
   if(!items.length && !LAB_BASKET.length){ showToast('ยังไม่ได้ใส่จำนวนวง','error'); return; }
 
+  if(LAB.denied || !currentPin){ showToast(LAB_DENIED_MSG,'error'); return; }
   showLoading(true,'บันทึกการจ่าย...');
   try{
     const {data,error} = await sb.rpc('fr_labour_pay_batch',{
@@ -4799,6 +4868,7 @@ async function doLabourPay(){
       p_others: LAB_BASKET
     });
     if(error) throw new Error(error.message);
+    if(data && data.ok===false && /ต้องเป็นผู้จัดการหรือพนักงานเงินสดย่อย/.test(String(data.error||''))){ LAB.denied=true; currentPin=''; throw new Error(LAB_DENIED_MSG); }
     if(!data || !data.ok) throw new Error((data&&data.error)||'บันทึกไม่สำเร็จ');
     closeModal('labourPayModal');
     const paidOthers = LAB_BASKET.slice();
@@ -4812,7 +4882,7 @@ async function doLabourPay(){
     render();
     showToast(`จ่ายค่าแรงช่าง ${fmt2(data.total)} บาท แล้ว`,'success');
     labSay('labMsg', `✅ จ่ายค่าแรงช่างแล้ว <b>${fmt2(data.total)} บาท</b>`+
-                     (data.bill_nos?` · บิล ${data.bill_nos}`:'')+
+                     (data.bill_nos?` · บิล ${esc(data.bill_nos)}`:'')+
                      (data.others?` · งานอื่น ${data.others} รายการ (${fmt2(data.others_total)} บาท)`:'')+
                      (data.photos?` · แนบรูปงาน ${data.photos} รูป`:'')+
                      ` — ลงเป็นรายจ่ายเงินสดย่อย 5211-20 <b>แถวเดียว</b> เรียบร้อย`, 'ok');
@@ -4853,8 +4923,12 @@ function labPickKind(k){
 // ══════════════════════════════════════════════
 // MODAL / UTILITY HELPERS
 // ══════════════════════════════════════════════
-function openModal(id){ document.getElementById(id).classList.add('open'); }
-function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+// r3-fu: เปิด/ปิดหน้าต่าง = ผลตรวจ PIN ที่ยังค้างของกล่องในหน้าต่างนั้นใช้ไม่ได้ทันที (กันผลจากรอบก่อนเปิดปุ่มรอบใหม่)
+// ตอนเปิด: ล้างช่อง PIN แล้วส่ง input → ตัวตรวจของช่องปิดปุ่ม/ล้างผู้ยืนยันเดิมเอง (ผู้ยืนยันจากรอบก่อนไม่ติดมารอบใหม่)
+function _pinInvalidate(id,reset){ const m=document.getElementById(id); if(m) m.querySelectorAll('.mgr-pin-inp').forEach(function(el){ _pinReq(el.id); el._ok4=false;
+  if(reset){ el.value=''; el.dispatchEvent(new Event('input',{bubbles:true})); } }); }
+function openModal(id){ _pinInvalidate(id,true); document.getElementById(id).classList.add('open'); }
+function closeModal(id){ _pinInvalidate(id); document.getElementById(id).classList.remove('open'); }
 function closeForm(){ closeModal('formModal'); }
 
 document.addEventListener('click',e=>{
