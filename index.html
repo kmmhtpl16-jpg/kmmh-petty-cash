@@ -13,7 +13,8 @@
 <title>KMMH — ระบบเงินสดย่อย v4</title>
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon.png">
 <link rel="apple-touch-icon" href="assets/icon.png">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- ล็อกรุ่น supabase-js + SRI (integrity) กัน CDN เปลี่ยนไฟล์เองโดยไม่มีใคร deploy · อัปเดตรุ่นต้องเปลี่ยนทั้ง URL และ integrity พร้อมกัน -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
