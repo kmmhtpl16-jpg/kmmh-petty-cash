@@ -1016,6 +1016,15 @@ async function pcCheckPin(pin, roles){
   if(error) return {data:null,error};
   return {data:(data&&data.id)?data:null,error:null};
 }
+// ── SEC-PC-APPROVER: งานที่ต้องมีผู้อนุมัติ → ส่ง PIN ให้เซิร์ฟเวอร์ตรวจซ้ำ + ทำรายการในฟังก์ชันเดียว (ชื่อผู้อนุมัติมาจากเซิร์ฟเวอร์) ──
+// คืนผลจากเซิร์ฟเวอร์ {ok:true, by, role, ...} หรือ throw Error พร้อมข้อความที่เซิร์ฟเวอร์ส่งมา
+async function pcAct(fn, args){
+  const {data,error}=await sb.rpc(fn,args);
+  if(error) throw new Error(error.message);
+  if(!data||data.ok!==true) throw new Error((data&&data.error)||'ทำรายการไม่สำเร็จ');
+  return data;
+}
+function pcPinOf(id){ const el=document.getElementById(id); return el?String(el.value||''):''; }
 // ── SEC-1A F2: กล่องยืนยัน PIN ผู้จัดการ/ผู้ตรวจ — ตรวจเมื่อครบ 6 หลัก หรือ PIN 4 หลักเมื่อกด "ตรวจรหัส 4 หลัก"/Enter เท่านั้น
 // (เดิมตรวจทุกครั้งที่พิมพ์ครบ 4 ตัว → PIN 6 หลักจะถูกนับผิด 2 ครั้งทุกการยืนยัน)
 function pinReady(val,id){
@@ -1842,7 +1851,7 @@ function renderAudit(){
     const cls=a.action==='add'?'audit-add':a.action==='edit'?'audit-edit':a.action==='del'?'audit-del':'audit-lock';
     const label=a.action==='add'?'เพิ่ม':a.action==='edit'?'แก้ไข':a.action==='del'?'ลบ':a.action==='login'?'เข้าสู่ระบบ':'ล็อก';
     const ts=a.logged_at?(new Date(a.logged_at).toLocaleString('sv-SE',{timeZone:'Asia/Bangkok'}).slice(0,16)):'—';
-    h+=`<div class="audit-item"><div class="audit-time">${ts}</div><div class="audit-txt">${a.description||a.action}</div><span class="audit-action ${cls}">${label}</span></div>`;
+    h+=`<div class="audit-item"><div class="audit-time">${ts}</div><div class="audit-txt">${esc(a.description||a.action)}</div><span class="audit-action ${cls}">${label}</span></div>`;
   });
   document.getElementById('auditList').innerHTML=h;
 }
@@ -1855,7 +1864,7 @@ let h=`<table style="width:100%;font-size:12px;border-collapse:collapse"><thead>
 countRecords.forEach(c=>{
 const d=parseFloat(c.diff||0);
 const dt=c.count_date?fmtDate(c.count_date):'-';
-h+=`<tr><td style="padding:5px 10px">${dt}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;padding:5px 10px">${fmt2(c.bal_book)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--amber);padding:5px 10px">${fmt2(c.bal_real)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${Math.abs(d)<0.005?'var(--green)':d>0?'var(--amber)':'var(--red)'};padding:5px 10px">${fmt2(d)}</td><td style="font-size:11px;color:var(--muted);padding:5px 10px">${c.note||'—'}</td>${canDelete?`<td style="padding:5px 10px"><button onclick="openDeleteCountModal('${c.id}','${fmt2(c.bal_real)}')" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer">🗑 ลบ</button></td>`:''}`+`</tr>`;
+h+=`<tr><td style="padding:5px 10px">${dt}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;padding:5px 10px">${fmt2(c.bal_book)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:var(--amber);padding:5px 10px">${fmt2(c.bal_real)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;color:${Math.abs(d)<0.005?'var(--green)':d>0?'var(--amber)':'var(--red)'};padding:5px 10px">${fmt2(d)}</td><td style="font-size:11px;color:var(--muted);padding:5px 10px">${esc(c.note||'—')}</td>${canDelete?`<td style="padding:5px 10px"><button onclick="openDeleteCountModal('${c.id}','${fmt2(c.bal_real)}')" style="background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);border-radius:6px;padding:2px 10px;font-size:11px;cursor:pointer">🗑 ลบ</button></td>`:''}`+`</tr>`;
 });
 h+=`</tbody></table>`;
 if(_hasCounts) document.getElementById('countHistory').innerHTML=h;
@@ -1947,12 +1956,13 @@ async function checkDeleteCountPin(){
 async function confirmDeleteCount(){
   if(!_deleteCountId) return;
   const btn=document.getElementById('btnDeleteCountConfirm');
-  const confirmedBy=btn._confirmedBy||'';
+  if(!btn._confirmedBy) return;
+  const pin=pcPinOf('deleteCountPin');
   closeModal('deleteCountModal');
   showLoading(true,'กำลังลบรายการนับเงิน...');
   try{
-    const {error}=await sb.from('petty_cash_counts').delete().eq('id',_deleteCountId);
-    if(error) throw new Error(error.message);
+    const r=await pcAct('pc_count_delete',{p_pin:pin,p_count_id:_deleteCountId});   // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN + ลบ
+    const confirmedBy=r.by;
     await addAudit('edit',`ลบรายการนับเงิน ID:${_deleteCountId} | ยืนยันโดย: ${confirmedBy}`);
     await loadCounts();
     renderCountHistory(); renderReconcile(); renderCards(); renderDiff();
@@ -2280,20 +2290,14 @@ async function confirmDailyCountSave(){
   const auditorName=btn._auditorName;
   if(!auditorName){ showToast('กรุณายืนยัน PIN ผู้ตรวจสอบก่อน','error'); return; }
   const {book,real,diff,today}=_pendingDaily;
+  const pin=pcPinOf('dcPin');
   closeModal('dailyPinModal');
   showLoading(true,'บันทึกการนับวันนี้...');
   try{
-    const {error}=await sb.from('petty_cash_counts').insert({
-      period_id:currentPeriod.id,
-      bal_book:book,
-      bal_real:real,
-      diff,
-      note:'นับประจำวัน (ตรวจโดย: '+auditorName+')',
-      by_role:currentRole,
-      by_name:currentUser?.name||currentRole,
-      count_date:today
-    });
-    if(error) throw new Error(error.message);
+    // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN ผู้ตรวจ/ผู้จัดการ + บันทึก · ชื่อผู้ตรวจในหมายเหตุมาจากเซิร์ฟเวอร์
+    const r=await pcAct('pc_count_daily_save',{p_pin:pin,p_period_id:currentPeriod.id,p_bal_book:book,p_bal_real:real,
+      p_count_date:today,p_by_role:currentRole,p_by_name:currentUser?.name||currentRole});
+    const auditorName=r.by;
     await addAudit('add','นับเงินประจำวัน ('+today+'): บัญชี '+fmt2(book)+' บาท | จริง '+fmt2(real)+' บาท | ต่าง '+fmt2(diff)+' บาท | โดย '+(currentUser?.name||currentRole)+' | ตรวจโดย '+auditorName);
     document.getElementById('dailyCountInput').value='';
     _pendingDaily=null;
@@ -2891,20 +2895,20 @@ function renderCloseKonArea(){
   } else if(kon.status==='pending_review'){
     const sat=kon.submitted_at?new Date(kon.submitted_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'—';
     h='<div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;line-height:1.8">⏳ <strong>รอผู้ตรวจสอบยืนยัน</strong><br>'
-     +'<span style="font-size:12px;color:#7a5500">ยื่นโดย: '+(kon.submitted_by||'—')+' · '+sat+'</span></div>';
+     +'<span style="font-size:12px;color:#7a5500">ยื่นโดย: '+esc(kon.submitted_by||'—')+' · '+sat+'</span></div>';
     if(currentRole==='auditor'||currentRole==='manager')
       h+='<button class="btn btn-dark no-print" onclick="openReviewModal(\'review\')" style="display:block;width:100%;font-size:15px;padding:12px">🔍 ตรวจสอบและยืนยัน</button>';
     if(currentRole==='manager') h+=cancelKonBtnHtml();
   } else if(kon.status==='pending_approve'){
     const rat=kon.reviewed_at?new Date(kon.reviewed_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}):'—';
     h='<div style="background:var(--green-bg);border:1px solid var(--green-border);border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;line-height:1.8">🔍 <strong>ผ่านการตรวจสอบแล้ว — รอผู้จัดการอนุมัติ</strong><br>'
-     +'<span style="font-size:12px;color:var(--green)">ตรวจโดย: '+(kon.reviewed_by||'—')+' · '+rat+'</span></div>';
+     +'<span style="font-size:12px;color:var(--green)">ตรวจโดย: '+esc(kon.reviewed_by||'—')+' · '+rat+'</span></div>';
     if(currentRole==='manager')
       h+='<button class="btn btn-dark no-print" onclick="openReviewModal(\'approve\')" style="display:block;width:100%;font-size:15px;padding:12px">✅ อนุมัติและปิดก้อน</button>';
     if(currentRole==='manager') h+=cancelKonBtnHtml();
   } else if(kon.status==='rejected'){
     h='<div style="background:var(--red-bg);border:1px solid var(--red-border);border-radius:10px;padding:12px 14px;margin-bottom:8px;font-size:13px;line-height:1.8">↩ <strong>ถูกส่งกลับแก้ไข</strong><br>'
-     +'<span style="font-size:12px;color:var(--red)">เหตุผล: '+(kon.rejection_reason||'—')+'</span></div>'
+     +'<span style="font-size:12px;color:var(--red)">เหตุผล: '+esc(kon.rejection_reason||'—')+'</span></div>'
      +'<button class="btn btn-amber no-print" onclick="reopenKonForEdit()" style="display:block;width:100%;font-size:15px;padding:12px">✏️ แก้ไขและยื่นใหม่</button>';
   }
   el.innerHTML=h;
@@ -3041,14 +3045,14 @@ async function openReviewModal(mode){
   const bookCl=konClosing(kon.kon_number,kon.open_bal);
   const diff=actual-bookCl;
   document.getElementById('reviewKonSummary').innerHTML=`
-    <div style="font-weight:700;margin-bottom:6px">ก้อน ${konCode(kon.kon_number)} — ยื่นโดย ${kon.submitted_by||'—'}</div>
+    <div style="font-weight:700;margin-bottom:6px">ก้อน ${konCode(kon.kon_number)} — ยื่นโดย ${esc(kon.submitted_by||'—')}</div>
     <div style="display:flex;justify-content:space-between"><span>ยอดตามบัญชี</span><span class="mono">${fmt2(bookCl)} บาท</span></div>
     <div style="display:flex;justify-content:space-between"><span>นับจริง</span><span class="mono">${fmt2(actual)} บาท</span></div>
     <div style="display:flex;justify-content:space-between;font-weight:700"><span>ผลต่าง</span><span class="mono" style="color:${Math.abs(diff)<0.005?'var(--green)':diff<0?'var(--red)':'var(--amber)'}">
       ${Math.abs(diff)<0.005?'ตรง ✅':diff<0?('ขาด '+fmt2(Math.abs(diff))+' บาท'):('เกิน '+fmt2(diff)+' บาท')}
     </span></div>
     ${(kon.reserve_amount||0)>0?`<div style="display:flex;justify-content:space-between"><span>เงินสำรอง</span><span class="mono">${fmt2(kon.reserve_amount)} บาท</span></div>`:''}
-    ${kon.close_note?`<div style="margin-top:6px;font-size:12px;color:#7a5500">📝 หมายเหตุ: ${kon.close_note}</div>`:''}
+    ${kon.close_note?`<div style="margin-top:6px;font-size:12px;color:#7a5500">📝 หมายเหตุ: ${esc(kon.close_note)}</div>`:''}
   `;
   openModal('reviewKonModal');
 }
@@ -3093,7 +3097,7 @@ function toggleRejectReason(){
 
 async function confirmReview(){
   const btn=document.getElementById('btnConfirmReview');
-  const user=btn._confirmedUser;
+  let user=btn._confirmedUser;
   if(!user){ showToast('ยืนยัน PIN ก่อน','error'); return; }
   const kon=currentOpenKon;
   if(!kon){ showToast('ไม่พบก้อน','error'); return; }
@@ -3108,12 +3112,9 @@ async function confirmReview(){
     // ผู้ตรวจสอบยืนยัน → pending_approve
     showLoading(true,'กำลังยืนยัน...');
     try{
-      const {error}=await sb.from('petty_cash_kon').update({
-        status:'pending_approve',
-        reviewed_at:new Date().toISOString(),
-        reviewed_by:user.name||user.role
-      }).eq('id',kon.id).eq('status','pending_review');
-      if(error) throw new Error(error.message);
+      // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN + สถานะก้อน แล้วเปลี่ยนเป็นรอผู้จัดการอนุมัติ (ชื่อผู้ตรวจจากเซิร์ฟเวอร์)
+      const r=await pcAct('pc_kon_review',{p_pin:pcPinOf('reviewPin'),p_kon_id:kon.id});
+      user={...user,name:r.by,role:r.role};
     }catch(e){ showLoading(false); showToast('❌ '+e.message,'error'); return; }
     showLoading(false);
     closeModal('reviewKonModal');
@@ -3139,11 +3140,9 @@ async function doRejectKon(user,kon){
   if(!reason){ showToast('ระบุเหตุผลที่ส่งกลับด้วย','error'); return; }
   showLoading(true,'กำลังส่งกลับ...');
   try{
-    const {error}=await sb.from('petty_cash_kon').update({
-      status:'rejected',
-      rejection_reason:reason
-    }).eq('id',kon.id);
-    if(error) throw new Error(error.message);
+    // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN + สถานะ (ก้อนที่ผ่านตรวจแล้ว ต้องเป็นผู้จัดการ) แล้วส่งกลับ
+    const r=await pcAct('pc_kon_reject',{p_pin:pcPinOf('reviewPin'),p_kon_id:kon.id,p_reason:reason});
+    user={...user,name:r.by,role:r.role};
   }catch(e){ showLoading(false); showToast('❌ '+e.message,'error'); return; }
   showLoading(false);
   closeModal('reviewKonModal');
@@ -3169,11 +3168,11 @@ async function openCancelKonModal(){
   if(currentRole!=='manager'){ showToast('เฉพาะผู้จัดการเท่านั้น','error'); return; }
   const bookCl=konClosing(kon.kon_number,kon.open_bal);
   document.getElementById('cancelKonSummary').innerHTML=
-    '<div style="font-weight:700;margin-bottom:6px">ก้อน '+kon.kon_number+' — ยื่นโดย '+(kon.submitted_by||'—')+'</div>'
+    '<div style="font-weight:700;margin-bottom:6px">ก้อน '+kon.kon_number+' — ยื่นโดย '+esc(kon.submitted_by||'—')+'</div>'
     +'<div style="display:flex;justify-content:space-between"><span>สถานะตอนนี้</span><span>'+(kon.status==='pending_review'?'⏳ รอผู้ตรวจสอบ':'🔍 รอผู้จัดการอนุมัติ')+'</span></div>'
     +'<div style="display:flex;justify-content:space-between"><span>ยอดตามบัญชี</span><span class="mono">'+fmt2(bookCl)+' บาท</span></div>'
     +'<div style="display:flex;justify-content:space-between"><span>ยอดนับจริงที่ยื่นมา</span><span class="mono">'+fmt2(kon.actual_cash||0)+' บาท</span></div>'
-    +(kon.close_note?'<div style="margin-top:6px;font-size:12px;color:#7a5500">📝 '+kon.close_note+'</div>':'');
+    +(kon.close_note?'<div style="margin-top:6px;font-size:12px;color:#7a5500">📝 '+esc(kon.close_note)+'</div>':'');
   document.getElementById('cancelKonPin').value='';
   document.getElementById('cancelKonPinStatus').textContent='';
   document.getElementById('cancelKonReason').value='';
@@ -3206,7 +3205,7 @@ async function checkCancelKonPin(){
 
 async function doCancelKonRequest(){
   const btn=document.getElementById('btnConfirmCancelKon');
-  const user=btn._confirmedUser;
+  let user=btn._confirmedUser;
   if(!user){ showToast('ยืนยัน PIN ผู้จัดการก่อน','error'); return; }
   const kon=currentOpenKon;
   if(!kon||!['pending_review','pending_approve'].includes(kon.status)){ showToast('ไม่มีคำขอปิดก้อนที่รออยู่','error'); return; }
@@ -3215,15 +3214,9 @@ async function doCancelKonRequest(){
 
   showLoading(true,'กำลังยกเลิกคำขอ...');
   try{
-    const {data,error}=await sb.from('petty_cash_kon').update({
-      status:'open',
-      submitted_at:null, submitted_by:null,
-      reviewed_at:null, reviewed_by:null,
-      actual_cash:null, reserve_amount:0,
-      close_note:null, rejection_reason:null
-    }).eq('id',kon.id).in('status',['pending_review','pending_approve']).select('id');
-    if(error) throw new Error(error.message);
-    if(!data||!data.length) throw new Error('สถานะก้อนเปลี่ยนไปแล้ว — รีเฟรชแล้วลองใหม่');
+    // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN ผู้จัดการ + สถานะ แล้วดึงก้อนกลับเป็นเปิด
+    const r=await pcAct('pc_kon_cancel',{p_pin:pcPinOf('cancelKonPin'),p_kon_id:kon.id,p_reason:reason});
+    user={...user,name:r.by,role:r.role};
   }catch(e){ showLoading(false); showToast('❌ ยกเลิกไม่สำเร็จ: '+e.message,'error'); return; }
   showLoading(false);
   closeModal('cancelKonModal');
@@ -3262,22 +3255,21 @@ async function reopenKonForEdit(){
 }
 
 async function doApproveKon(user,kon){
-  const actual=kon.actual_cash||0;
-  const reserve=kon.reserve_amount||0;
-  const closedBy=user.name||user.role;
+  let actual=kon.actual_cash||0;
+  let reserve=kon.reserve_amount||0;
+  let closedBy=user.name||user.role;
   const konTxDates=transactions.filter(t=>t.kon_number===kon.kon_number).map(t=>t.tx_date).filter(Boolean).sort();
-  const closeTxDate=konTxDates.at(-1)||bkkDate(new Date());
+  let closeTxDate=konTxDates.at(-1)||bkkDate(new Date());
 
   showLoading(true,'กำลังปิดก้อน...');
   let result;
   try{
-    const {data,error}=await sb.rpc('close_kon',{
-      p_kon_id:kon.id, p_actual_cash:actual,
-      p_reserve:reserve, p_closed_by:closedBy,
-      p_tx_date:closeTxDate
-    });
-    if(error) throw new Error(error.message);
-    result=data;
+    // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN ผู้จัดการ + สถานะ "ผ่านตรวจแล้ว" แล้วเรียก close_kon เอง
+    // (ยอดนับ/เงินสำรอง/วันที่ใช้ค่าจากฐานข้อมูล · ชื่อผู้ปิดจากเซิร์ฟเวอร์ · บันทึกนับเงินตามหมายเหตุในธุรกรรมเดียวกัน)
+    result=await pcAct('pc_kon_approve',{p_pin:pcPinOf('reviewPin'),p_kon_id:kon.id});
+    closedBy=result.by; if(result.tx_date) closeTxDate=result.tx_date;
+    // r2: ยอดที่รายงาน (audit/Telegram) = ยอดที่เซิร์ฟเวอร์ใช้ปิดจริง ไม่ใช่ค่าที่หน้าเว็บจำไว้
+    if(result.actual_cash!=null) actual=Number(result.actual_cash); if(result.reserve!=null) reserve=Number(result.reserve);
   }catch(e){
     showLoading(false);
     showToast(`❌ ปิดก้อนล้มเหลว: ${e.message}`,'error');
@@ -3290,17 +3282,6 @@ async function doApproveKon(user,kon){
       );
     }catch(_){}
     return;
-  }
-
-  if(kon.close_note){
-    try{
-      const bookClosing=konClosing(kon.kon_number,kon.open_bal);
-      await sb.from('petty_cash_counts').insert({
-        period_id:currentPeriod.id, bal_book:bookClosing,
-        bal_real:actual, diff:actual-bookClosing, note:kon.close_note,
-        by_role:currentRole, by_name:closedBy
-      });
-    }catch(_){}
   }
 
   await addAudit('edit',
@@ -4320,18 +4301,12 @@ async function checkWrAuditPin(){
 
 async function auditWithdraw(action){
   const note=document.getElementById('wrAuditNote').value.trim();
-  const auditorName=document.getElementById('btnWrAuditApprove')._auditorName||'Auditor';
   if(!_activeWrId) return;
   showLoading(true,action==='approve'?'กำลังบันทึกผลตรวจสอบ...':'กำลังปฏิเสธ...');
   try{
-    const newStatus=action==='approve'?'audited':'rejected';
-    const {error}=await sb.from('petty_cash_withdrawals').update({
-      status:newStatus,
-      audit_note:note||null,
-      audited_by_name:auditorName,
-      audited_at:new Date().toISOString()
-    }).eq('id',_activeWrId);
-    if(error) throw new Error(error.message);
+    // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN ผู้ตรวจสอบ + สถานะ "รอตรวจ" แล้วบันทึกผล (ชื่อผู้ตรวจจากเซิร์ฟเวอร์)
+    const r=await pcAct('pc_withdraw_audit',{p_pin:pcPinOf('wrAuditPin'),p_wr_id:_activeWrId,p_action:action,p_note:note});
+    const auditorName=r.by;
     await addAudit('edit',
       `${action==='approve'?'ผ่านการตรวจสอบ':'ปฏิเสธ'}คำขอเบิก | โดย: ${auditorName} (Auditor)${note?' | หมายเหตุ: '+note:''}`
     );
@@ -4392,68 +4367,31 @@ async function checkWrMgrPin(){
 
 async function mgrWithdraw(action){
   const note=document.getElementById('wrMgrNote').value.trim();
-  const mgrName=document.getElementById('btnWrMgrApprove')._mgrName||'Manager';
   const wr=withdrawRequests.find(w=>w.id===_activeWrId);
   if(!wr) return;
   showLoading(true,action==='approve'?'กำลังอนุมัติและเบิกเงิน...':'กำลังปฏิเสธ...');
   try{
-    const newStatus=action==='approve'?'approved':'rejected';
-    const {error:we}=await sb.from('petty_cash_withdrawals').update({
-      status:newStatus,
-      mgr_note:note||null,
-      approved_by_name:mgrName,
-      approved_at:new Date().toISOString()
-    }).eq('id',_activeWrId);
-    if(we) throw new Error(we.message);
+    // SEC-PC-APPROVER: เซิร์ฟเวอร์ตรวจ PIN ผู้จัดการ + สถานะ "ผ่านตรวจแล้ว" แล้วบันทึกผล
+    // อนุมัติ = เซิร์ฟเวอร์บันทึกรายรับเติมเงิน + คืนเงินสดย่อยจากยอดนับล่าสุด ในธุรกรรมเดียว (ตรรกะเดิม)
+    const r=await pcAct('pc_withdraw_decide',{p_pin:pcPinOf('wrMgrPin'),p_wr_id:_activeWrId,p_action:action,p_note:note});
+    const mgrName=r.by;
+    const reqAmt=(r.requested_amount!=null)?Number(r.requested_amount):wr.requested_amount;   // r2: ยอดที่เซิร์ฟเวอร์ใช้จริง
 
     if(action==='approve'){
-      // บันทึกรายการรับเงินเข้า transactions อัตโนมัติ
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-      const {error:te}=await sb.from('petty_cash_transactions').insert({
-        period_id:currentPeriod.id,
-        tx_date:today,
-        tx_type:'income',
-        acc_code:'1111-30',
-        description:`[เงินสดย่อย (เติมเงิน)] เบิกเงิน — อนุมัติโดย ${mgrName}${note?' ('+note+')':''}`,
-        amount:wr.requested_amount,
-        by_role:'manager',
-        by_name:mgrName
-      });
-      if(te) throw new Error(te.message);
-      // บันทึกรายการคืนเงินสดย่อยจากยอดนับจริง (อัตโนมัติ) — บันทึกเป็น "รายจ่าย" (คืนเงิน)
-                // ตรรกะ: เงินที่นับได้จริงต้องคืน ไม่สามารถเก็บไว้ในกล่องได้
-                // ยอดที่ใช้ได้ = 20,000 - เงินเกิน - เงินนับจริงที่คืน
-                if(countRecords.length>0){
-                const balReal=parseFloat(countRecords[0].bal_real)||0;
-                if(balReal>0){
-                const {error:re}=await sb.from('petty_cash_transactions').insert({
-                period_id:currentPeriod.id,
-                tx_date:today,
-                tx_type:'expense',
-                acc_code:'1111-10',
-                description:'[เงินสด - คืนเงินสดย่อย] คืนเงินสดย่อยจากยอดนับจริง (อัตโนมัติ) | ตรวจสอบโดย: '+mgrName,
-                amount:balReal,
-                is_return:true,
-                by_role:'manager',
-                by_name:mgrName
-                });
-                if(re) console.warn('คืนเงิน insert failed:',re.message);
-                }
-                }
                 await addAudit('edit',
-        `อนุมัติเบิกเงิน ฿${fmt2(wr.requested_amount)} | โดย: ${mgrName} (Manager) | บันทึกเป็นรายรับอัตโนมัติ${note?' | หมายเหตุ: '+note:''}`
+        `อนุมัติเบิกเงิน ฿${fmt2(reqAmt)} | โดย: ${mgrName} (Manager) | บันทึกเป็นรายรับอัตโนมัติ${note?' | หมายเหตุ: '+note:''}`
       );
       await loadTransactions();
     } else {
       await addAudit('edit',
-        `ปฏิเสธคำขอเบิก ฿${fmt2(wr.requested_amount)} | โดย: ${mgrName} (Manager)${note?' | เหตุผล: '+note:''}`
+        `ปฏิเสธคำขอเบิก ฿${fmt2(reqAmt)} | โดย: ${mgrName} (Manager)${note?' | เหตุผล: '+note:''}`
       );
     }
     await loadWithdrawRequests();
     closeModal('wrMgrModal');
     render();
     renderWithdrawList();
-    showToast(action==='approve'?`อนุมัติเบิก ฿${fmt2(wr.requested_amount)} บาท เรียบร้อย ✅`:'ปฏิเสธคำขอเบิกแล้ว','success');
+    showToast(action==='approve'?`อนุมัติเบิก ฿${fmt2(reqAmt)} บาท เรียบร้อย ✅`:'ปฏิเสธคำขอเบิกแล้ว','success');
   }catch(e){ showToast('ล้มเหลว: '+e.message,'error'); }
   showLoading(false);
 }
